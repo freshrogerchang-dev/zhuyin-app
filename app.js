@@ -77,7 +77,7 @@ function speak(text){
   if(!('speechSynthesis' in window)) return;
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'zh-TW';
-  u.rate = 0.85;
+  u.rate = 0.6;
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
 }
@@ -136,6 +136,23 @@ function playMoleMissSound(){
   try{
     const ctx = getAudioCtx();
     playTone(ctx, 200, ctx.currentTime, 0.08, 'sine', 0.08);
+  }catch(e){ /* 靜靜跳過 */ }
+}
+function playStrokeSound(strokeNum){
+  try{
+    const ctx = getAudioCtx();
+    const scale = [523.25, 587.33, 659.25, 698.46, 783.99, 880, 987.77, 1046.5];
+    const freq = scale[strokeNum % scale.length];
+    playTone(ctx, freq, ctx.currentTime, 0.15, 'sine', 0.15);
+  }catch(e){ /* 靜靜跳過 */ }
+}
+function playDingDongSound(){
+  try{
+    const ctx = getAudioCtx();
+    const ding = 659.25, dong = 523.25;
+    [[ding,0],[dong,0.22],[ding,0.55],[dong,0.77]].forEach(([freq, offset])=>
+      playTone(ctx, freq, ctx.currentTime + offset, 0.22, 'sine', 0.22)
+    );
   }catch(e){ /* 靜靜跳過 */ }
 }
 
@@ -243,6 +260,7 @@ function beginCharacterFlow(char){
   renderListenOptions();
   showScreen('screen-intro');
   setupIntroWriter();
+  speak(char);
 }
 
 const INTRO_W = 220, INTRO_H = 220, INTRO_PAD = 12;
@@ -342,6 +360,7 @@ function setupWriteScreen(){
 function startQuiz(){
   writer.quiz({
     onCorrectStroke: function(strokeData){
+      playStrokeSound(strokeData.strokeNum);
       const msg = document.getElementById('write-msg');
       msg.style.color = '#3C9265';
       msg.textContent = `✓ 第 ${strokeData.strokeNum + 1} 筆對了！還剩 ${strokeData.strokesRemaining} 筆`;
@@ -356,6 +375,7 @@ function startQuiz(){
       writer.highlightStroke(strokeData.strokeNum);
     },
     onComplete: function(summaryData){
+      playDingDongSound();
       setTimeout(()=> finishWriting(summaryData.totalMistakes), 400);
     }
   });
@@ -395,6 +415,7 @@ function startZhuyinPractice(){
   document.getElementById('zhuyin-symbol-display').textContent = zhuyinData[currentZhuyinIndex].symbol;
   document.getElementById('zhuyin-example-label').textContent = `例字：${zhuyinData[currentZhuyinIndex].example}`;
   showScreen('screen-zhuyin-intro');
+  speakZhuyinExample();
 }
 function speakZhuyinExample(){ speak(zhuyinData[currentZhuyinIndex].example); }
 
