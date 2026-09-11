@@ -285,7 +285,7 @@ function addStrokeNumberLabels(box, char){
       const rawX = median[0][0];
       const rawY = median[0][1];
       const sx = t.x + t.scale * rawX;
-      const sy = t.y - t.scale * rawY;
+      const sy = (INTRO_H - t.y) - t.scale * rawY;
       const badge = document.createElement('div');
       badge.className = 'stroke-num-badge';
       badge.textContent = i + 1;
