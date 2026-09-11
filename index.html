@@ -168,6 +168,11 @@
           <div class="info"><b>字音配對</b><span>花 4 🪙 玩一次</span></div>
           <button onclick="playGame('match',4)">玩</button>
         </div>
+        <div class="game-card">
+          <div class="emoji">🏎️</div>
+          <div class="info"><b>注音賽車</b><span>花 5 🪙 玩一次</span></div>
+          <button onclick="playGame('race',5)">玩</button>
+        </div>
       </div>
       <div class="msg" id="arcade-msg"></div>
     </div>
@@ -220,6 +225,40 @@
         <div class="match-col" id="match-col-zhuyin"></div>
       </div>
       <div class="msg" id="match-msg"></div>
+    </div>
+  </div>
+
+  <!-- 注音賽車 -->
+  <div class="screen" id="screen-race">
+    <div class="topbar">
+      <button class="back-btn" onclick="showScreen('screen-arcade')">← 返回</button>
+      <div class="coin-badge"><span class="icon">🪙</span><span class="coin-count">8</span></div>
+    </div>
+    <div class="card">
+      <h2>注音賽車</h2>
+      <p class="sub" style="margin-bottom:0;">選對衝刺，答錯慢慢開，看誰先到終點！</p>
+      <div class="race-qnum-badge">第 <span id="race-qnum">1</span> / 9 題</div>
+      <div class="race-char" id="race-char"></div>
+      <div class="race-choice-row">
+        <button class="race-choice" id="race-choice-left">
+          <span class="arrow">⬅️</span><span class="race-choice-text"></span>
+        </button>
+        <button class="race-choice" id="race-choice-right">
+          <span class="arrow">➡️</span><span class="race-choice-text"></span>
+        </button>
+      </div>
+      <p class="race-key-hint">也可以用鍵盤的 ← → 方向鍵作答</p>
+      <div class="race-track">
+        <div class="race-lane">
+          <div class="race-car" id="race-car-player">🏎️</div>
+          <span class="race-flag">🏁</span>
+        </div>
+        <div class="race-lane">
+          <div class="race-car" id="race-car-rival">🚗</div>
+          <span class="race-flag">🏁</span>
+        </div>
+      </div>
+      <div class="msg" id="race-msg"></div>
     </div>
   </div>
 

@@ -65,7 +65,7 @@ function pickWeightedFrom(keys){
   return weighted[Math.floor(Math.random()*weighted.length)];
 }
 
-const GAME_SCREEN_MUSIC = { 'screen-mole': 'mole', 'screen-memory': 'memory', 'screen-match': 'match' };
+const GAME_SCREEN_MUSIC = { 'screen-mole': 'mole', 'screen-memory': 'memory', 'screen-match': 'match', 'screen-race': 'race' };
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -155,6 +155,24 @@ function playDingDongSound(){
     );
   }catch(e){ /* 靜靜跳過 */ }
 }
+function playRaceMoveSound(){
+  try{
+    const ctx = getAudioCtx();
+    [440, 587.33, 739.99].forEach((freq, i)=> playTone(ctx, freq, ctx.currentTime + i*0.04, 0.1, 'sawtooth', 0.15));
+  }catch(e){ /* 靜靜跳過 */ }
+}
+function playRaceBlockedSound(){
+  try{
+    const ctx = getAudioCtx();
+    playTone(ctx, 220, ctx.currentTime, 0.15, 'square', 0.1);
+  }catch(e){ /* 靜靜跳過 */ }
+}
+function playRaceWinSound(){
+  try{
+    const ctx = getAudioCtx();
+    [659.25, 783.99, 987.77, 1318.5].forEach((freq, i)=> playTone(ctx, freq, ctx.currentTime + i*0.12, 0.3, 'sine', 0.22));
+  }catch(e){ /* 靜靜跳過 */ }
+}
 
 // ---- 共用：小遊戲背景音樂 ----
 // 每個遊戲配一組不同「音色 + 節奏 + 旋律走向」的組合，讓三首聽起來明顯不一樣，
@@ -187,6 +205,15 @@ const BGM_TRACKS = {
     notes: [
       [392.0, 0.2], [392.0, 0.12], [587.33, 0.28], [523.25, 0.14],
       [440.0, 0.14], [659.25, 0.32], [587.33, 0.14], [493.88, 0.3]
+    ]
+  },
+  // 注音賽車：鋸齒波、又快又密集的固定節奏，模擬引擎轟轟往前衝的感覺
+  race: {
+    waveType: 'sawtooth',
+    volume: 0.04,
+    notes: [
+      [329.63, 0.1], [329.63, 0.1], [392.0, 0.1], [329.63, 0.1],
+      [493.88, 0.14], [440.0, 0.1], [392.0, 0.1], [329.63, 0.16]
     ]
   }
 };
@@ -560,6 +587,7 @@ function playGame(game, cost){
   if(game==='mole'){ showScreen('screen-mole'); startMole(); }
   else if(game==='memory'){ showScreen('screen-memory'); startMemory(); }
   else if(game==='match'){ showScreen('screen-match'); startMatch(); }
+  else if(game==='race'){ showScreen('screen-race'); startRace(); }
 }
 
 function shuffleArray(arr){
@@ -747,6 +775,96 @@ function tryMatchResolve(){
       document.getElementById('match-msg').textContent = '';
     }, 600);
   }
+}
+
+// ---- 注音賽車 ----
+// 玩法：一路上會出現 RACE_QUESTION_COUNT 題二選一的題目(答案分別在左邊/右邊)，
+// 用滑鼠點選或鍵盤 ←/→ 作答。答對「衝刺」前進一大步，答錯就跟對手一樣「慢慢開」，
+// 對手每一題都固定前進 RACE_SLOW_STEP，所以只要不是每題都答對，最多也只會被追平，
+// 不會被對手超車，鼓勵小朋友多答對來拉開差距。
+const RACE_QUESTION_COUNT = 9;
+const RACE_FINISH = 90; // 車子跑到終點旗子前的百分比位置
+const RACE_SLOW_STEP = 10; // 答錯時，我方跟對手都前進的百分比("慢慢開")
+const RACE_SPRINT_STEP = 20; // 答對時，我方額外衝刺前進的百分比
+let raceQuestionIndex = 0, raceProgress = 0, raceRivalProgress = 0, raceActive = false, raceLocked = false, raceCurrentChar = null, raceCorrectSide = null;
+
+function startRace(){
+  raceQuestionIndex = 0;
+  raceProgress = 0;
+  raceRivalProgress = 0;
+  raceActive = true;
+  raceLocked = false;
+  document.getElementById('race-msg').textContent = '';
+  document.getElementById('race-choice-left').onclick = () => pickRaceAnswer('left');
+  document.getElementById('race-choice-right').onclick = () => pickRaceAnswer('right');
+  document.addEventListener('keydown', handleRaceKeydown);
+  updateRaceCars();
+  nextRaceQuestion();
+}
+function handleRaceKeydown(e){
+  if(!raceActive || raceLocked) return;
+  if(e.key === 'ArrowLeft') pickRaceAnswer('left');
+  else if(e.key === 'ArrowRight') pickRaceAnswer('right');
+}
+function nextRaceQuestion(){
+  raceQuestionIndex++;
+  document.getElementById('race-qnum').textContent = raceQuestionIndex;
+  raceCurrentChar = pickWeightedFrom(Object.keys(charData));
+  const data = charData[raceCurrentChar];
+  document.getElementById('race-char').textContent = raceCurrentChar;
+  const wrongOptions = data.options.filter(o => o !== data.zhuyin);
+  const wrongPick = wrongOptions[Math.floor(Math.random()*wrongOptions.length)];
+  const pair = shuffleArray([data.zhuyin, wrongPick]);
+  raceCorrectSide = pair[0] === data.zhuyin ? 'left' : 'right';
+  const leftBtn = document.getElementById('race-choice-left');
+  const rightBtn = document.getElementById('race-choice-right');
+  leftBtn.className = 'race-choice';
+  rightBtn.className = 'race-choice';
+  leftBtn.querySelector('.race-choice-text').textContent = pair[0];
+  rightBtn.querySelector('.race-choice-text').textContent = pair[1];
+}
+function pickRaceAnswer(side){
+  if(!raceActive || raceLocked) return;
+  raceLocked = true;
+  const isCorrect = side === raceCorrectSide;
+  const chosenBtn = document.getElementById(side === 'left' ? 'race-choice-left' : 'race-choice-right');
+  chosenBtn.classList.add(isCorrect ? 'correct' : 'wrong');
+  if(!isCorrect){
+    const correctBtn = document.getElementById(raceCorrectSide === 'left' ? 'race-choice-left' : 'race-choice-right');
+    correctBtn.classList.add('correct');
+  }
+  raceRivalProgress += RACE_SLOW_STEP;
+  raceProgress += isCorrect ? RACE_SPRINT_STEP : RACE_SLOW_STEP;
+  if(isCorrect) playRaceMoveSound(); else playRaceBlockedSound();
+  updateRaceCars();
+
+  const raceOver = raceProgress >= RACE_FINISH || raceRivalProgress >= RACE_FINISH || raceQuestionIndex >= RACE_QUESTION_COUNT;
+  setTimeout(()=>{
+    raceLocked = false;
+    if(raceOver) finishRace();
+    else nextRaceQuestion();
+  }, 600);
+}
+function updateRaceCars(){
+  document.getElementById('race-car-player').style.left = Math.min(raceProgress, RACE_FINISH) + '%';
+  document.getElementById('race-car-rival').style.left = Math.min(raceRivalProgress, RACE_FINISH) + '%';
+}
+function finishRace(){
+  raceActive = false;
+  document.removeEventListener('keydown', handleRaceKeydown);
+  document.getElementById('race-choice-left').onclick = null;
+  document.getElementById('race-choice-right').onclick = null;
+  let msg;
+  if(raceProgress > raceRivalProgress){
+    playRaceWinSound();
+    msg = '衝過終點線，你贏了！🏆';
+  } else if(raceProgress === raceRivalProgress){
+    msg = '你們同時衝線，打成平手！握手言和 🤝';
+  } else {
+    msg = '差一點點就贏了，再挑戰一次吧！加油！';
+  }
+  document.getElementById('race-msg').textContent = msg;
+  setTimeout(()=> showScreen('screen-arcade'), 2000);
 }
 
 initFromSupabase();
