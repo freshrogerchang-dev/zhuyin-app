@@ -249,13 +249,31 @@
       </div>
       <p class="race-key-hint">也可以用鍵盤的 ← → 方向鍵作答</p>
       <div class="race-track">
-        <div class="race-lane">
-          <div class="race-car" id="race-car-player">🏎️</div>
-          <span class="race-flag">🏁</span>
+        <span class="race-flag">🏁</span>
+        <div class="race-lane-line"></div>
+        <div class="race-car" id="race-car-player">
+          <svg class="race-car-svg" viewBox="0 0 40 60" xmlns="http://www.w3.org/2000/svg">
+            <rect class="race-car-body" x="7" y="2" width="26" height="56" rx="10" stroke="#1F2A44" stroke-width="3"/>
+            <rect x="12" y="14" width="16" height="16" rx="4" fill="#BFE3FF" stroke="#1F2A44" stroke-width="2"/>
+            <circle cx="12" cy="9" r="3" fill="#FFE18A" stroke="#1F2A44" stroke-width="1.5"/>
+            <circle cx="28" cy="9" r="3" fill="#FFE18A" stroke="#1F2A44" stroke-width="1.5"/>
+            <rect x="0" y="10" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="33" y="10" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="0" y="36" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="33" y="36" width="7" height="14" rx="2" fill="#1F2A44"/>
+          </svg>
         </div>
-        <div class="race-lane">
-          <div class="race-car" id="race-car-rival">🚗</div>
-          <span class="race-flag">🏁</span>
+        <div class="race-car" id="race-car-rival">
+          <svg class="race-car-svg" viewBox="0 0 40 60" xmlns="http://www.w3.org/2000/svg">
+            <rect class="race-car-body" x="7" y="2" width="26" height="56" rx="10" stroke="#1F2A44" stroke-width="3"/>
+            <rect x="12" y="14" width="16" height="16" rx="4" fill="#BFE3FF" stroke="#1F2A44" stroke-width="2"/>
+            <circle cx="12" cy="9" r="3" fill="#FFE18A" stroke="#1F2A44" stroke-width="1.5"/>
+            <circle cx="28" cy="9" r="3" fill="#FFE18A" stroke="#1F2A44" stroke-width="1.5"/>
+            <rect x="0" y="10" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="33" y="10" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="0" y="36" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="33" y="36" width="7" height="14" rx="2" fill="#1F2A44"/>
+          </svg>
         </div>
       </div>
       <div class="msg" id="race-msg"></div>

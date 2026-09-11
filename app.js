@@ -846,8 +846,8 @@ function pickRaceAnswer(side){
   }, 600);
 }
 function updateRaceCars(){
-  document.getElementById('race-car-player').style.left = Math.min(raceProgress, RACE_FINISH) + '%';
-  document.getElementById('race-car-rival').style.left = Math.min(raceRivalProgress, RACE_FINISH) + '%';
+  document.getElementById('race-car-player').style.bottom = Math.min(raceProgress, RACE_FINISH) + '%';
+  document.getElementById('race-car-rival').style.bottom = Math.min(raceRivalProgress, RACE_FINISH) + '%';
 }
 function finishRace(){
   raceActive = false;
