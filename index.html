@@ -239,30 +239,12 @@
       <p class="sub" style="margin-bottom:0;">選對衝刺，答錯慢慢開，看誰先到終點！</p>
       <div class="race-qnum-badge">第 <span id="race-qnum">1</span> / 9 題</div>
       <div class="race-char" id="race-char"></div>
-      <div class="race-choice-row">
-        <button class="race-choice" id="race-choice-left">
-          <span class="arrow">⬅️</span><span class="race-choice-text"></span>
-        </button>
-        <button class="race-choice" id="race-choice-right">
-          <span class="arrow">➡️</span><span class="race-choice-text"></span>
-        </button>
-      </div>
-      <p class="race-key-hint">也可以用鍵盤的 ← → 方向鍵作答</p>
+      <p class="race-key-hint">點賽道的左邊或右邊，或用鍵盤 ← → 方向鍵，把車開去正確答案那一邊</p>
       <div class="race-track">
         <span class="race-flag">🏁</span>
         <div class="race-lane-line"></div>
-        <div class="race-car" id="race-car-player">
-          <svg class="race-car-svg" viewBox="0 0 40 60" xmlns="http://www.w3.org/2000/svg">
-            <rect class="race-car-body" x="7" y="2" width="26" height="56" rx="10" stroke="#1F2A44" stroke-width="3"/>
-            <rect x="12" y="14" width="16" height="16" rx="4" fill="#BFE3FF" stroke="#1F2A44" stroke-width="2"/>
-            <circle cx="12" cy="9" r="3" fill="#FFE18A" stroke="#1F2A44" stroke-width="1.5"/>
-            <circle cx="28" cy="9" r="3" fill="#FFE18A" stroke="#1F2A44" stroke-width="1.5"/>
-            <rect x="0" y="10" width="7" height="14" rx="2" fill="#1F2A44"/>
-            <rect x="33" y="10" width="7" height="14" rx="2" fill="#1F2A44"/>
-            <rect x="0" y="36" width="7" height="14" rx="2" fill="#1F2A44"/>
-            <rect x="33" y="36" width="7" height="14" rx="2" fill="#1F2A44"/>
-          </svg>
-        </div>
+        <div class="race-answer-sign" id="race-sign-left"></div>
+        <div class="race-answer-sign" id="race-sign-right"></div>
         <div class="race-car" id="race-car-rival">
           <svg class="race-car-svg" viewBox="0 0 40 60" xmlns="http://www.w3.org/2000/svg">
             <rect class="race-car-body" x="7" y="2" width="26" height="56" rx="10" stroke="#1F2A44" stroke-width="3"/>
@@ -275,6 +257,20 @@
             <rect x="33" y="36" width="7" height="14" rx="2" fill="#1F2A44"/>
           </svg>
         </div>
+        <div class="race-car" id="race-car-player">
+          <svg class="race-car-svg" viewBox="0 0 40 60" xmlns="http://www.w3.org/2000/svg">
+            <rect class="race-car-body" x="7" y="2" width="26" height="56" rx="10" stroke="#1F2A44" stroke-width="3"/>
+            <rect x="12" y="14" width="16" height="16" rx="4" fill="#BFE3FF" stroke="#1F2A44" stroke-width="2"/>
+            <circle cx="12" cy="9" r="3" fill="#FFE18A" stroke="#1F2A44" stroke-width="1.5"/>
+            <circle cx="28" cy="9" r="3" fill="#FFE18A" stroke="#1F2A44" stroke-width="1.5"/>
+            <rect x="0" y="10" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="33" y="10" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="0" y="36" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="33" y="36" width="7" height="14" rx="2" fill="#1F2A44"/>
+          </svg>
+        </div>
+        <div class="race-hitzone race-hitzone-left" id="race-hitzone-left"></div>
+        <div class="race-hitzone race-hitzone-right" id="race-hitzone-right"></div>
       </div>
       <div class="msg" id="race-msg"></div>
     </div>

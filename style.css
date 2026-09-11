@@ -210,20 +210,14 @@
   .match-item.correct{background:var(--green);color:white;cursor:default;}
 
   .race-qnum-badge{font-size:14px;font-weight:700;color:#5a6478;margin-top:6px;}
-  .race-choice-row{display:flex;gap:14px;width:100%;margin-top:10px;}
-  .race-choice{
-    flex:1;background:white;border:3px solid var(--ink);border-radius:16px;
-    padding:18px 8px;font-size:22px;font-weight:900;cursor:pointer;
-    display:flex;flex-direction:column;align-items:center;gap:6px;
+  .race-key-hint{font-size:12px;color:#8792a6;margin:4px 0 0;}
+  .race-char{
+    font-size:56px;font-weight:900;color:var(--ink);text-align:center;margin:4px 0 0;
   }
-  .race-choice .arrow{font-size:22px;}
-  .race-choice.correct{background:var(--green);color:white;border-color:var(--green-dark);}
-  .race-choice.wrong{background:#FFC9C9;border-color:#D9534F;animation:shake .3s;}
-  .race-key-hint{font-size:12px;color:#8792a6;margin:6px 0 0;}
   .race-track{
     position:relative;overflow:hidden;
     background:#4A5D7A;border:3px solid var(--ink);border-radius:18px;
-    height:220px;margin:10px 0;width:100%;
+    height:320px;margin:10px 0;width:100%;
   }
   .race-lane-line{
     position:absolute;left:50%;top:-32px;bottom:-32px;width:6px;
@@ -239,22 +233,35 @@
     position:absolute;top:4px;left:50%;transform:translateX(-50%);
     font-size:20px;z-index:2;
   }
+  .race-answer-sign{
+    position:absolute;top:34px;transform:translateX(-50%);
+    background:white;border:3px solid var(--ink);border-radius:12px;
+    padding:8px 12px;font-size:19px;font-weight:900;color:var(--ink);
+    z-index:3;white-space:nowrap;
+  }
+  #race-sign-left{left:25%;}
+  #race-sign-right{left:75%;}
+  .race-answer-sign.correct{background:var(--green);color:white;border-color:var(--green-dark);}
+  .race-answer-sign.wrong{background:#FFC9C9;border-color:#D9534F;animation:shake .3s;}
+  .race-hitzone{
+    position:absolute;top:0;bottom:0;width:50%;z-index:4;cursor:pointer;
+  }
+  .race-hitzone-left{left:0;}
+  .race-hitzone-right{right:0;}
   .race-car{
     position:absolute;bottom:0;transform:translateX(-50%);
-    transition:bottom .5s ease;z-index:2;
+    transition:bottom .5s ease,left .3s ease;z-index:2;
   }
-  #race-car-player{left:32%;}
-  #race-car-rival{left:68%;}
+  #race-car-player{left:25%;z-index:3;}
+  #race-car-rival{left:50%;opacity:.85;}
   .race-car-svg{
     display:block;width:26px;height:auto;
     animation:race-car-bob .4s ease-in-out infinite alternate;
   }
+  #race-car-rival .race-car-svg{ width:22px; }
   .race-car-body{ fill:var(--coral); }
   #race-car-rival .race-car-body{ fill:var(--green); }
   @keyframes race-car-bob{
     from{ transform:translateY(0); }
     to{ transform:translateY(-3px); }
-  }
-  .race-char{
-    font-size:56px;font-weight:900;color:var(--ink);text-align:center;margin:8px 0 0;
   }

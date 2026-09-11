@@ -795,8 +795,9 @@ function startRace(){
   raceActive = true;
   raceLocked = false;
   document.getElementById('race-msg').textContent = '';
-  document.getElementById('race-choice-left').onclick = () => pickRaceAnswer('left');
-  document.getElementById('race-choice-right').onclick = () => pickRaceAnswer('right');
+  document.getElementById('race-car-player').style.left = '25%';
+  document.getElementById('race-hitzone-left').onclick = () => pickRaceAnswer('left');
+  document.getElementById('race-hitzone-right').onclick = () => pickRaceAnswer('right');
   document.addEventListener('keydown', handleRaceKeydown);
   updateRaceCars();
   nextRaceQuestion();
@@ -816,23 +817,24 @@ function nextRaceQuestion(){
   const wrongPick = wrongOptions[Math.floor(Math.random()*wrongOptions.length)];
   const pair = shuffleArray([data.zhuyin, wrongPick]);
   raceCorrectSide = pair[0] === data.zhuyin ? 'left' : 'right';
-  const leftBtn = document.getElementById('race-choice-left');
-  const rightBtn = document.getElementById('race-choice-right');
-  leftBtn.className = 'race-choice';
-  rightBtn.className = 'race-choice';
-  leftBtn.querySelector('.race-choice-text').textContent = pair[0];
-  rightBtn.querySelector('.race-choice-text').textContent = pair[1];
+  const leftSign = document.getElementById('race-sign-left');
+  const rightSign = document.getElementById('race-sign-right');
+  leftSign.className = 'race-answer-sign';
+  rightSign.className = 'race-answer-sign';
+  leftSign.textContent = pair[0];
+  rightSign.textContent = pair[1];
 }
 function pickRaceAnswer(side){
   if(!raceActive || raceLocked) return;
   raceLocked = true;
   const isCorrect = side === raceCorrectSide;
-  const chosenBtn = document.getElementById(side === 'left' ? 'race-choice-left' : 'race-choice-right');
-  chosenBtn.classList.add(isCorrect ? 'correct' : 'wrong');
+  const chosenSign = document.getElementById(side === 'left' ? 'race-sign-left' : 'race-sign-right');
+  chosenSign.classList.add(isCorrect ? 'correct' : 'wrong');
   if(!isCorrect){
-    const correctBtn = document.getElementById(raceCorrectSide === 'left' ? 'race-choice-left' : 'race-choice-right');
-    correctBtn.classList.add('correct');
+    const correctSign = document.getElementById(raceCorrectSide === 'left' ? 'race-sign-left' : 'race-sign-right');
+    correctSign.classList.add('correct');
   }
+  document.getElementById('race-car-player').style.left = (side === 'left' ? 25 : 75) + '%';
   raceRivalProgress += RACE_SLOW_STEP;
   raceProgress += isCorrect ? RACE_SPRINT_STEP : RACE_SLOW_STEP;
   if(isCorrect) playRaceMoveSound(); else playRaceBlockedSound();
@@ -852,8 +854,8 @@ function updateRaceCars(){
 function finishRace(){
   raceActive = false;
   document.removeEventListener('keydown', handleRaceKeydown);
-  document.getElementById('race-choice-left').onclick = null;
-  document.getElementById('race-choice-right').onclick = null;
+  document.getElementById('race-hitzone-left').onclick = null;
+  document.getElementById('race-hitzone-right').onclick = null;
   let msg;
   if(raceProgress > raceRivalProgress){
     playRaceWinSound();
