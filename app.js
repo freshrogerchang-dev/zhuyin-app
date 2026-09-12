@@ -719,9 +719,24 @@ function finishWordWriting(){
 // 額外多做的是：認識畫面會依筆順動畫畫出來，比注音符號多一層引導。
 const LETTER_CANVAS_SIZE = 260;
 const LETTER_SCALE = (LETTER_CANVAS_SIZE - 30) / 130;
-const LETTER_OFFSET_X = (LETTER_CANVAS_SIZE - 100 * LETTER_SCALE) / 2;
-const LETTER_OFFSET_Y = 15;
-function letterPt(p){ return [LETTER_OFFSET_X + p[0]*LETTER_SCALE, LETTER_OFFSET_Y + p[1]*LETTER_SCALE]; }
+let letterOffsetX = 0, letterOffsetY = 0;
+function letterPt(p){ return [letterOffsetX + p[0]*LETTER_SCALE, letterOffsetY + p[1]*LETTER_SCALE]; }
+
+// 每個字母實際用到的座標範圍不一樣(o 只在下半部、l 只有中間一條線)，
+// 置中要看這個字母自己筆畫的範圍，而不是整個格線的範圍，這樣不管哪個
+// 字母都會端正地置中在框框正中間，比例(大寫比小寫高)還是保留原樣。
+function updateLetterCentering(letter){
+  let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
+  letterData[letter].strokes.forEach(stroke=>{
+    stroke.forEach(([x,y])=>{
+      if(x<minX) minX=x; if(x>maxX) maxX=x;
+      if(y<minY) minY=y; if(y>maxY) maxY=y;
+    });
+  });
+  const midX = (minX+maxX)/2, midY = (minY+maxY)/2;
+  letterOffsetX = LETTER_CANVAS_SIZE/2 - midX*LETTER_SCALE;
+  letterOffsetY = LETTER_CANVAS_SIZE/2 - midY*LETTER_SCALE;
+}
 
 let currentLetter = 'A';
 let letterIntroCanvas, letterIntroCtx, letterAnimTimer = null;
@@ -736,10 +751,31 @@ function startLetterPractice(){
   currentLetter = pickWeightedFrom(Object.keys(letterData));
   showScreen('screen-letter-intro');
   setupLetterIntro();
-  speak(currentLetter, 'en-US');
+  speakLetterWithCase(currentLetter);
+}
+
+// 英文字母大小寫唸起來發音是一樣的(例如 D/d 都唸「dee」)，光聽聲音沒辦法
+// 分辨是要練大寫還是小寫，所以先用中文唸一次「大寫/小寫」，再唸字母本身。
+// 兩段分開唸(用 onend 接下一段)，是因為 speak() 每次呼叫都會 cancel 前一句，
+// 混著中英文放進同一句 utterance 也常常會被單一語言的語音引擎唸錯或跳過。
+function speakLetterWithCase(letter){
+  if(!('speechSynthesis' in window)) return;
+  const isUpper = letter === letter.toUpperCase() && letter !== letter.toLowerCase();
+  const u1 = new SpeechSynthesisUtterance(isUpper ? '大寫' : '小寫');
+  u1.lang = 'zh-TW';
+  u1.rate = 0.6;
+  u1.onend = () => {
+    const u2 = new SpeechSynthesisUtterance(letter);
+    u2.lang = 'en-US';
+    u2.rate = 0.6;
+    speechSynthesis.speak(u2);
+  };
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u1);
 }
 
 function setupLetterIntro(){
+  updateLetterCentering(currentLetter);
   letterIntroCanvas = document.getElementById('letter-intro-canvas');
   letterIntroCtx = letterIntroCanvas.getContext('2d');
   addLetterStrokeNumberLabels();
@@ -766,9 +802,27 @@ function replayLetterIntro(){
   animateLetterStroke(0, letterData[currentLetter].strokes);
 }
 
+// 原本是照 letterData 裡定義的座標點直接一段一段畫，遇到只有 2 個點的
+// 直線筆畫(例如 I、l 的那一豎)就會整條線一格畫完，感覺像是瞬間跳過去，
+// 不像用筆在寫字。改成先按固定的小間距把每一段補出很多中間點，
+// 再一小步一小步畫，這樣不管筆畫長短，畫的「速度」都差不多，
+// 線越長自然畫越久，比較像真的拿筆慢慢寫。
+function densifyStrokePoints(pts, stepPx){
+  const dense = [pts[0]];
+  for(let i=1;i<pts.length;i++){
+    const [x1,y1] = pts[i-1], [x2,y2] = pts[i];
+    const dist = Math.hypot(x2-x1, y2-y1);
+    const steps = Math.max(1, Math.round(dist/stepPx));
+    for(let s=1;s<=steps;s++){
+      dense.push([x1+(x2-x1)*s/steps, y1+(y2-y1)*s/steps]);
+    }
+  }
+  return dense;
+}
+
 function animateLetterStroke(strokeIndex, strokes){
   if(strokeIndex >= strokes.length) return;
-  const pts = strokes[strokeIndex].map(letterPt);
+  const pts = densifyStrokePoints(strokes[strokeIndex].map(letterPt), 3);
   letterIntroCtx.strokeStyle = '#1F2A44';
   letterIntroCtx.lineWidth = 12;
   letterIntroCtx.lineCap = 'round';
@@ -776,7 +830,7 @@ function animateLetterStroke(strokeIndex, strokes){
   let i = 1;
   function step(){
     if(i >= pts.length){
-      letterAnimTimer = setTimeout(()=> animateLetterStroke(strokeIndex + 1, strokes), 350);
+      letterAnimTimer = setTimeout(()=> animateLetterStroke(strokeIndex + 1, strokes), 480);
       return;
     }
     letterIntroCtx.beginPath();
@@ -784,13 +838,14 @@ function animateLetterStroke(strokeIndex, strokes){
     letterIntroCtx.lineTo(pts[i][0], pts[i][1]);
     letterIntroCtx.stroke();
     i++;
-    letterAnimTimer = setTimeout(step, 45);
+    letterAnimTimer = setTimeout(step, 28);
   }
   step();
 }
 
 function setupLetterWrite(){
   clearTimeout(letterAutoFinishTimer);
+  updateLetterCentering(currentLetter);
   letterCanvas = document.getElementById('letter-write-canvas');
   letterCtx = letterCanvas.getContext('2d');
   letterGuideAlpha = 0.18;
