@@ -73,10 +73,10 @@ function showScreen(id){
   else stopGameMusic();
 }
 
-function speak(text){
+function speak(text, lang){
   if(!('speechSynthesis' in window)) return;
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'zh-TW';
+  u.lang = lang || 'zh-TW';
   u.rate = 0.6;
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
@@ -571,6 +571,323 @@ function finishZhuyinWriting(){
   else if(score >= 0.3) coinReward = 2;
   else coinReward = 1;
   recordProgress(zhuyinData[currentZhuyinIndex].symbol, coinReward);
+  showResult(coinReward);
+}
+
+// ---- 詞語練習流程 ----
+// 詞語都只用 charData 裡已經有的字組成，所以寫字測驗直接沿用單字的
+// HanziWriter 設定，注音也直接查 charData，不用另外維護一份詞語注音。
+let currentWord = '', currentWordChars = [], currentWordIndex = 0;
+let wordWriter = null, wordTotalMistakes = 0, wordHintUsed = false;
+
+function startWordPractice(){
+  currentWord = pickWeightedFrom(wordData);
+  currentWordChars = currentWord.split('');
+  const wrap = document.getElementById('word-display');
+  wrap.innerHTML = '';
+  currentWordChars.forEach(c=>{
+    const col = document.createElement('div');
+    col.className = 'word-char-col';
+    const charEl = document.createElement('div');
+    charEl.className = 'word-char';
+    charEl.textContent = c;
+    const zEl = document.createElement('div');
+    zEl.className = 'word-char-zhuyin';
+    zEl.textContent = charData[c].zhuyin;
+    col.appendChild(charEl);
+    col.appendChild(zEl);
+    wrap.appendChild(col);
+  });
+  showScreen('screen-word-intro');
+  speak(currentWord);
+}
+
+function startWordWriting(){
+  currentWordIndex = 0;
+  wordTotalMistakes = 0;
+  wordHintUsed = false;
+  showScreen('screen-word-write');
+  setupWordWriteStep();
+}
+
+function setupWordWriteStep(){
+  const char = currentWordChars[currentWordIndex];
+  document.getElementById('word-write-progress').textContent = `第 ${currentWordIndex + 1} / ${currentWordChars.length} 字`;
+  const box = document.getElementById('word-hanzi-target');
+  box.innerHTML = '';
+  document.getElementById('word-write-msg').textContent = '';
+  wordWriter = HanziWriter.create(box, char, {
+    width: 260, height: 260, padding: 14,
+    showOutline: true,
+    strokeColor: '#1F2A44',
+    outlineColor: '#C7D2E0',
+    drawingColor: '#FF8A5B',
+    strokeWidth: 22,
+    drawingWidth: 34,
+    highlightColor: '#FFD23F',
+    leniency: 2,
+    acceptBackwardsStrokes: true,
+    showHintAfterMisses: 2,
+    highlightCompleteColor: '#4CAF7D',
+    strokeAnimationSpeed: 0.4,
+    delayBetweenStrokes: 800,
+    strokeHighlightSpeed: 0.5
+  });
+  startWordQuiz();
+}
+
+function startWordQuiz(){
+  wordWriter.quiz({
+    onCorrectStroke: function(strokeData){
+      playStrokeSound(strokeData.strokeNum);
+      const msg = document.getElementById('word-write-msg');
+      msg.style.color = '#3C9265';
+      msg.textContent = `✓ 第 ${strokeData.strokeNum + 1} 筆對了！還剩 ${strokeData.strokesRemaining} 筆`;
+      if(strokeData.strokesRemaining > 0){
+        wordWriter.highlightStroke(strokeData.strokeNum + 1);
+      }
+    },
+    onMistake: function(strokeData){
+      const msg = document.getElementById('word-write-msg');
+      msg.style.color = '#E56A3B';
+      msg.textContent = `第 ${strokeData.strokeNum + 1} 筆的方向不太對，再試一次`;
+      wordWriter.highlightStroke(strokeData.strokeNum);
+    },
+    onComplete: function(summaryData){
+      wordTotalMistakes += summaryData.totalMistakes;
+      playDingDongSound();
+      setTimeout(()=> advanceWordWriting(), 400);
+    }
+  });
+  wordWriter.highlightStroke(0);
+}
+
+function advanceWordWriting(){
+  currentWordIndex++;
+  if(currentWordIndex < currentWordChars.length){
+    setupWordWriteStep();
+  } else {
+    finishWordWriting();
+  }
+}
+
+function clearWordCanvas(){
+  wordWriter.cancelQuiz();
+  document.getElementById('word-write-msg').textContent = '';
+  startWordQuiz();
+}
+
+function showWordHint(){
+  wordHintUsed = true;
+  wordWriter.cancelQuiz();
+  document.getElementById('word-write-msg').textContent = '再看一次筆順...';
+  wordWriter.animateCharacter({
+    onComplete: function(){ startWordQuiz(); }
+  });
+}
+
+function finishWordWriting(){
+  const totalMistakes = wordTotalMistakes + (wordHintUsed ? 1 : 0);
+  let coinReward;
+  if(totalMistakes===0) coinReward=3;
+  else if(totalMistakes<=3) coinReward=2;
+  else coinReward=1;
+  recordProgress(currentWord, coinReward);
+  showResult(coinReward);
+}
+
+// ---- 英文大小寫字母筆順練習 ----
+// 跟注音符號一樣，字母的筆順沒有像國字那樣公認的官方筆順資料庫，
+// 這裡用自己定義的簡化筆順座標(見 data.js 的 letterData 註解)，
+// 描寫評分也沿用注音符號那套「像素覆蓋率」演算法，而不是逐筆比對。
+// 額外多做的是：認識畫面會依筆順動畫畫出來，比注音符號多一層引導。
+const LETTER_CANVAS_SIZE = 260;
+const LETTER_SCALE = (LETTER_CANVAS_SIZE - 30) / 130;
+const LETTER_OFFSET_X = (LETTER_CANVAS_SIZE - 100 * LETTER_SCALE) / 2;
+const LETTER_OFFSET_Y = 15;
+function letterPt(p){ return [LETTER_OFFSET_X + p[0]*LETTER_SCALE, LETTER_OFFSET_Y + p[1]*LETTER_SCALE]; }
+
+let currentLetter = 'A';
+let letterIntroCanvas, letterIntroCtx, letterAnimTimer = null;
+let letterCanvas, letterCtx, letterDrawing = false;
+let letterGlyphPoints = [];
+let letterUserPoints = [];
+let letterGuideAlpha = 0.18;
+
+function startLetterPractice(){
+  currentLetter = pickWeightedFrom(Object.keys(letterData));
+  showScreen('screen-letter-intro');
+  setupLetterIntro();
+  speak(currentLetter, 'en-US');
+}
+
+function setupLetterIntro(){
+  letterIntroCanvas = document.getElementById('letter-intro-canvas');
+  letterIntroCtx = letterIntroCanvas.getContext('2d');
+  replayLetterIntro();
+}
+
+function replayLetterIntro(){
+  clearTimeout(letterAnimTimer);
+  letterIntroCtx.clearRect(0, 0, LETTER_CANVAS_SIZE, LETTER_CANVAS_SIZE);
+  animateLetterStroke(0, letterData[currentLetter].strokes);
+}
+
+function animateLetterStroke(strokeIndex, strokes){
+  if(strokeIndex >= strokes.length) return;
+  const pts = strokes[strokeIndex].map(letterPt);
+  letterIntroCtx.strokeStyle = '#1F2A44';
+  letterIntroCtx.lineWidth = 12;
+  letterIntroCtx.lineCap = 'round';
+  letterIntroCtx.lineJoin = 'round';
+  let i = 1;
+  function step(){
+    if(i >= pts.length){
+      letterAnimTimer = setTimeout(()=> animateLetterStroke(strokeIndex + 1, strokes), 350);
+      return;
+    }
+    letterIntroCtx.beginPath();
+    letterIntroCtx.moveTo(pts[i-1][0], pts[i-1][1]);
+    letterIntroCtx.lineTo(pts[i][0], pts[i][1]);
+    letterIntroCtx.stroke();
+    i++;
+    letterAnimTimer = setTimeout(step, 45);
+  }
+  step();
+}
+
+function setupLetterWrite(){
+  letterCanvas = document.getElementById('letter-write-canvas');
+  letterCtx = letterCanvas.getContext('2d');
+  letterGuideAlpha = 0.18;
+  letterUserPoints = [];
+  document.getElementById('letter-write-msg').textContent = '';
+  buildLetterGlyphMask();
+  drawLetterGuide();
+
+  letterCanvas.onpointerdown = e => {
+    e.preventDefault();
+    letterCanvas.setPointerCapture(e.pointerId);
+    letterDrawing = true;
+    const p = letterPos(e);
+    letterUserPoints.push(p);
+    letterCtx.beginPath();
+    letterCtx.moveTo(p.x, p.y);
+  };
+  letterCanvas.onpointermove = e => {
+    if(!letterDrawing) return;
+    e.preventDefault();
+    const p = letterPos(e);
+    letterUserPoints.push(p);
+    letterCtx.lineTo(p.x, p.y);
+    letterCtx.strokeStyle = '#FF8A5B';
+    letterCtx.lineWidth = 26;
+    letterCtx.lineCap = 'round';
+    letterCtx.lineJoin = 'round';
+    letterCtx.stroke();
+  };
+  letterCanvas.onpointerup = e => { e.preventDefault(); letterDrawing = false; };
+  letterCanvas.onpointercancel = e => { e.preventDefault(); letterDrawing = false; };
+  letterCanvas.ontouchstart = e => e.preventDefault();
+  letterCanvas.ontouchmove = e => e.preventDefault();
+}
+
+function letterPos(e){
+  const r = letterCanvas.getBoundingClientRect();
+  return {x:(e.clientX-r.left)*(letterCanvas.width/r.width), y:(e.clientY-r.top)*(letterCanvas.height/r.height)};
+}
+
+function buildLetterGlyphMask(){
+  const off = document.createElement('canvas');
+  off.width = letterCanvas.width; off.height = letterCanvas.height;
+  const octx = off.getContext('2d');
+  octx.strokeStyle = '#000';
+  octx.lineWidth = 26;
+  octx.lineCap = 'round';
+  octx.lineJoin = 'round';
+  letterData[currentLetter].strokes.forEach(stroke=>{
+    const pts = stroke.map(letterPt);
+    octx.beginPath();
+    octx.moveTo(pts[0][0], pts[0][1]);
+    for(let i=1;i<pts.length;i++) octx.lineTo(pts[i][0], pts[i][1]);
+    octx.stroke();
+  });
+  const data = octx.getImageData(0,0,off.width,off.height).data;
+  const pts = [];
+  const step = 6;
+  for(let y=0;y<off.height;y+=step){
+    for(let x=0;x<off.width;x+=step){
+      const idx = (y*off.width+x)*4;
+      if(data[idx+3] > 128) pts.push({x,y});
+    }
+  }
+  letterGlyphPoints = pts;
+}
+
+function drawLetterGuide(){
+  letterCtx.clearRect(0,0,letterCanvas.width,letterCanvas.height);
+  letterCtx.save();
+  letterCtx.globalAlpha = letterGuideAlpha;
+  letterCtx.strokeStyle = '#1F2A44';
+  letterCtx.lineWidth = 12;
+  letterCtx.lineCap = 'round';
+  letterCtx.lineJoin = 'round';
+  letterData[currentLetter].strokes.forEach(stroke=>{
+    const pts = stroke.map(letterPt);
+    letterCtx.beginPath();
+    letterCtx.moveTo(pts[0][0], pts[0][1]);
+    for(let i=1;i<pts.length;i++) letterCtx.lineTo(pts[i][0], pts[i][1]);
+    letterCtx.stroke();
+  });
+  letterCtx.restore();
+}
+
+function clearLetterCanvas(){
+  letterGuideAlpha = 0.18;
+  letterUserPoints = [];
+  drawLetterGuide();
+  document.getElementById('letter-write-msg').textContent = '';
+}
+
+function hintLetter(){
+  letterGuideAlpha = 0.4;
+  letterUserPoints = [];
+  drawLetterGuide();
+  document.getElementById('letter-write-msg').textContent = '提示：照著明顯一點的字母描寫看看！';
+}
+
+function finishLetterWriting(){
+  if(letterUserPoints.length < 10){
+    alert('請先照著淡淡的字母描一次喔！');
+    return;
+  }
+  const tol = 16 * (letterCanvas.width/260);
+  let coveredCount = 0;
+  for(const gp of letterGlyphPoints){
+    let found = false;
+    for(const up of letterUserPoints){
+      if(Math.hypot(gp.x-up.x, gp.y-up.y) < tol){ found = true; break; }
+    }
+    if(found) coveredCount++;
+  }
+  const coverage = letterGlyphPoints.length ? coveredCount/letterGlyphPoints.length : 0;
+
+  let accCount = 0;
+  for(const up of letterUserPoints){
+    let found = false;
+    for(const gp of letterGlyphPoints){
+      if(Math.hypot(gp.x-up.x, gp.y-up.y) < tol){ found = true; break; }
+    }
+    if(found) accCount++;
+  }
+  const accuracy = letterUserPoints.length ? accCount/letterUserPoints.length : 0;
+
+  const score = coverage*0.6 + accuracy*0.4;
+  let coinReward;
+  if(score >= 0.55) coinReward = 3;
+  else if(score >= 0.3) coinReward = 2;
+  else coinReward = 1;
+  recordProgress(currentLetter, coinReward);
   showResult(coinReward);
 }
 

@@ -32,6 +32,8 @@
       <p class="sub">寫對國字、認對注音，就能得到金幣<br>金幣可以拿去玩遊戲！</p>
       <button class="btn btn-primary" onclick="openCharSelect()">✏️ 練國字</button>
       <button class="btn btn-green" onclick="startZhuyinPractice()">🔤 練注音</button>
+      <button class="btn btn-secondary" onclick="startWordPractice()">📚 練詞語</button>
+      <button class="btn btn-secondary" onclick="startLetterPractice()">🔠 練英文字母</button>
       <button class="btn btn-secondary" onclick="showScreen('screen-arcade')">🎮 遊戲時間</button>
     </div>
   </div>
@@ -128,6 +130,71 @@
       </div>
       <div class="msg" id="zhuyin-write-msg"></div>
       <button class="btn btn-green" onclick="finishZhuyinWriting()">✅ 我寫好了</button>
+    </div>
+  </div>
+
+  <!-- 認識詞語 -->
+  <div class="screen" id="screen-word-intro">
+    <div class="topbar">
+      <button class="back-btn" onclick="showScreen('screen-home')">← 返回</button>
+      <div class="coin-badge"><span class="icon">🪙</span><span class="coin-count">8</span></div>
+    </div>
+    <div class="card">
+      <p class="sub" style="margin-bottom:6px;">來認識這個詞語</p>
+      <div class="word-display" id="word-display"></div>
+      <button class="btn btn-secondary" onclick="speak(currentWord)">🔊 聽發音</button>
+      <button class="btn btn-primary" onclick="startWordWriting()">下一步：寫寫看</button>
+    </div>
+  </div>
+
+  <!-- 詞語筆順練習 -->
+  <div class="screen" id="screen-word-write">
+    <div class="topbar">
+      <button class="back-btn" onclick="showScreen('screen-word-intro')">← 返回</button>
+      <div class="coin-badge"><span class="icon">🪙</span><span class="coin-count">8</span></div>
+    </div>
+    <div class="card">
+      <h2>照著淡淡的字形寫寫看</h2>
+      <p class="sub" id="word-write-progress" style="margin-bottom:6px;">第 1 / 2 字</p>
+      <div class="hanzi-box" id="word-hanzi-target" style="width:260px;height:260px;"></div>
+      <div class="write-controls">
+        <button class="btn btn-secondary" onclick="clearWordCanvas()">🧹 清除重寫</button>
+        <button class="btn btn-secondary" onclick="showWordHint()">💡 提示</button>
+      </div>
+      <div class="msg" id="word-write-msg"></div>
+    </div>
+  </div>
+
+  <!-- 認識英文字母 -->
+  <div class="screen" id="screen-letter-intro">
+    <div class="topbar">
+      <button class="back-btn" onclick="showScreen('screen-home')">← 返回</button>
+      <div class="coin-badge"><span class="icon">🪙</span><span class="coin-count">8</span></div>
+    </div>
+    <div class="card">
+      <p class="sub" style="margin-bottom:6px;">來認識這個字母</p>
+      <canvas class="zhuyin-canvas" id="letter-intro-canvas" width="260" height="260"></canvas>
+      <button class="btn btn-secondary" onclick="replayLetterIntro()">🔁 再看一次筆順</button>
+      <button class="btn btn-secondary" onclick="speak(currentLetter,'en-US')">🔊 聽發音</button>
+      <button class="btn btn-primary" onclick="showScreen('screen-letter-write'); setupLetterWrite();">下一步：寫寫看</button>
+    </div>
+  </div>
+
+  <!-- 英文字母描寫練習 -->
+  <div class="screen" id="screen-letter-write">
+    <div class="topbar">
+      <button class="back-btn" onclick="showScreen('screen-letter-intro')">← 返回</button>
+      <div class="coin-badge"><span class="icon">🪙</span><span class="coin-count">8</span></div>
+    </div>
+    <div class="card">
+      <h2>照著淡淡的字母描寫</h2>
+      <canvas class="zhuyin-canvas" id="letter-write-canvas" width="260" height="260"></canvas>
+      <div class="write-controls">
+        <button class="btn btn-secondary" onclick="clearLetterCanvas()">🧹 清除重寫</button>
+        <button class="btn btn-secondary" onclick="hintLetter()">💡 提示</button>
+      </div>
+      <div class="msg" id="letter-write-msg"></div>
+      <button class="btn btn-green" onclick="finishLetterWriting()">✅ 我寫好了</button>
     </div>
   </div>
 
