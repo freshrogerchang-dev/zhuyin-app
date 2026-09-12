@@ -325,3 +325,23 @@
   }
   .chip.mastered{background:var(--green);color:white;border-color:var(--green-dark);}
   .chip.needs-work{background:#FFE3D3;border-color:var(--coral-dark);}
+
+  .balloon-stats{display:flex;justify-content:space-between;width:100%;font-weight:700;margin-bottom:2px;}
+  .balloon-char{font-size:48px;font-weight:900;color:var(--ink);margin:2px 0 8px;}
+  .balloon-sky{
+    position:relative;width:100%;height:300px;overflow:hidden;
+    background:linear-gradient(to bottom, #BEE3FF, #EAF6FF);
+    border:3px solid var(--ink);border-radius:18px;
+  }
+  .balloon{
+    position:absolute;bottom:-70px;
+    display:flex;flex-direction:column;align-items:center;
+    cursor:pointer;user-select:none;-webkit-user-select:none;
+  }
+  .balloon-emoji{font-size:44px;line-height:1;filter:drop-shadow(0 2px 2px rgba(0,0,0,.15));}
+  .balloon-label{
+    margin-top:-6px;background:white;border:2px solid var(--ink);border-radius:999px;
+    padding:2px 8px;font-size:14px;font-weight:900;color:var(--ink);white-space:nowrap;
+  }
+  .balloon.pop{animation:balloon-pop .25s ease forwards;}
+  @keyframes balloon-pop{ to{ transform:scale(1.6); opacity:0; } }

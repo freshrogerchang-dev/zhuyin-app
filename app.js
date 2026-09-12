@@ -80,7 +80,7 @@ function pickWeightedFrom(keys){
   return weighted[Math.floor(Math.random()*weighted.length)];
 }
 
-const GAME_SCREEN_MUSIC = { 'screen-mole': 'mole', 'screen-memory': 'memory', 'screen-match': 'match', 'screen-race': 'race' };
+const GAME_SCREEN_MUSIC = { 'screen-mole': 'mole', 'screen-memory': 'memory', 'screen-match': 'match', 'screen-race': 'race', 'screen-balloon': 'balloon' };
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -189,6 +189,12 @@ function playRaceWinSound(){
     [659.25, 783.99, 987.77, 1318.5].forEach((freq, i)=> playTone(ctx, freq, ctx.currentTime + i*0.12, 0.3, 'sine', 0.22));
   }catch(e){ /* 靜靜跳過 */ }
 }
+function playBalloonPopSound(){
+  try{
+    const ctx = getAudioCtx();
+    [880, 1174.66].forEach((freq, i)=> playTone(ctx, freq, ctx.currentTime + i*0.06, 0.18, 'sine', 0.22));
+  }catch(e){ /* 靜靜跳過 */ }
+}
 
 // ---- 共用：小遊戲背景音樂 ----
 // 每個遊戲配一組不同「音色 + 節奏 + 旋律走向」的組合，讓三首聽起來明顯不一樣，
@@ -230,6 +236,15 @@ const BGM_TRACKS = {
     notes: [
       [329.63, 0.1], [329.63, 0.1], [392.0, 0.1], [329.63, 0.1],
       [493.88, 0.14], [440.0, 0.1], [392.0, 0.1], [329.63, 0.16]
+    ]
+  },
+  // 打氣球：正弦波但節奏輕盈、旋律一路往上飄再往下收，模擬氣球浮起來的感覺
+  balloon: {
+    waveType: 'sine',
+    volume: 0.05,
+    notes: [
+      [392.0, 0.3], [440.0, 0.25], [523.25, 0.3], [659.25, 0.4],
+      [523.25, 0.25], [440.0, 0.25], [392.0, 0.35], [349.23, 0.4]
     ]
   }
 };
@@ -1221,6 +1236,7 @@ function playGame(game, cost){
   else if(game==='memory'){ showScreen('screen-memory'); startMemory(); }
   else if(game==='match'){ showScreen('screen-match'); startMatch(); }
   else if(game==='race'){ showScreen('screen-race'); startRace(); }
+  else if(game==='balloon'){ showScreen('screen-balloon'); startBalloon(); }
 }
 
 function shuffleArray(arr){
@@ -1501,6 +1517,104 @@ function finishRace(){
     msg = '差一點點就贏了，再挑戰一次吧！加油！';
   }
   document.getElementById('race-msg').textContent = msg;
+  setTimeout(()=> showScreen('screen-arcade'), 2000);
+}
+
+// ---- 打氣球 ----
+// 每回合聽發音、看國字，畫面下方浮出幾顆氣球，各自寫著一個候選注音，
+// 要在氣球飄出畫面之前戳破寫著正確答案的那一顆。戳到錯的只是消失，
+// 不會扣分也不會結束這一回合，步調比打地鼠寬鬆，適合大班孩子。
+const BALLOON_ROUND_COUNT = 8;
+const BALLOON_RISE_SECONDS = 7;
+const BALLOON_LANES = [10, 35, 60, 85]; // 氣球在天空裡的左邊位置(百分比)
+let balloonRound = 0, balloonScore = 0, balloonCurrentChar = null, balloonRoundActive = false;
+let balloonTimers = [];
+
+function startBalloon(){
+  balloonRound = 0;
+  balloonScore = 0;
+  document.getElementById('balloon-score').textContent = 0;
+  document.getElementById('balloon-msg').textContent = '';
+  nextBalloonRound();
+}
+
+function nextBalloonRound(){
+  balloonTimers.forEach(t=>clearTimeout(t));
+  balloonTimers = [];
+  const sky = document.getElementById('balloon-sky');
+  sky.innerHTML = '';
+  balloonRound++;
+  document.getElementById('balloon-round').textContent = Math.min(balloonRound, BALLOON_ROUND_COUNT);
+  if(balloonRound > BALLOON_ROUND_COUNT){
+    finishBalloon();
+    return;
+  }
+
+  balloonCurrentChar = pickWeightedFrom(Object.keys(charData));
+  const data = charData[balloonCurrentChar];
+  document.getElementById('balloon-char').textContent = balloonCurrentChar;
+  speak(balloonCurrentChar);
+  balloonRoundActive = true;
+
+  shuffleArray(data.options.slice()).forEach((opt, i)=>{
+    const balloon = document.createElement('div');
+    balloon.className = 'balloon';
+    balloon.style.left = BALLOON_LANES[i] + '%';
+    balloon.style.filter = `hue-rotate(${i * 70}deg)`;
+    balloon.style.bottom = '-70px';
+
+    const emoji = document.createElement('div');
+    emoji.className = 'balloon-emoji';
+    emoji.textContent = '🎈';
+    const label = document.createElement('div');
+    label.className = 'balloon-label';
+    label.textContent = opt;
+    balloon.appendChild(emoji);
+    balloon.appendChild(label);
+    balloon.onclick = () => popBalloon(balloon, opt === data.zhuyin);
+    sky.appendChild(balloon);
+
+    // 先讓瀏覽器畫出起始位置，下一輪再改 bottom 才會真的觸發漂浮的過場動畫
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
+        balloon.style.transition = `bottom ${BALLOON_RISE_SECONDS}s linear`;
+        balloon.style.bottom = '380px';
+      });
+    });
+
+    balloonTimers.push(setTimeout(()=>{
+      if(balloon.parentElement) balloon.remove();
+    }, BALLOON_RISE_SECONDS * 1000 + 50));
+  });
+
+  balloonTimers.push(setTimeout(()=>{
+    if(balloonRoundActive){
+      balloonRoundActive = false;
+      setTimeout(()=> nextBalloonRound(), 400);
+    }
+  }, BALLOON_RISE_SECONDS * 1000 + 100));
+}
+
+function popBalloon(balloon, isCorrect){
+  if(!balloonRoundActive) return;
+  balloon.onclick = null;
+  balloon.classList.add('pop');
+  if(isCorrect){
+    playBalloonPopSound();
+    balloonScore++;
+    document.getElementById('balloon-score').textContent = balloonScore;
+    balloonRoundActive = false;
+    setTimeout(()=> balloon.remove(), 250);
+    setTimeout(()=> nextBalloonRound(), 700);
+  } else {
+    playMismatchSound();
+    setTimeout(()=> balloon.remove(), 250);
+  }
+}
+
+function finishBalloon(){
+  document.getElementById('balloon-sky').innerHTML = '';
+  document.getElementById('balloon-msg').textContent = `打氣球結束！戳對了 ${balloonScore} / ${BALLOON_ROUND_COUNT} 個 🎈`;
   setTimeout(()=> showScreen('screen-arcade'), 2000);
 }
 

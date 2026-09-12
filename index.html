@@ -275,6 +275,11 @@
           <div class="info"><b>注音賽車</b><span>花 5 🪙 玩一次</span></div>
           <button onclick="playGame('race',5)">玩</button>
         </div>
+        <div class="game-card">
+          <div class="emoji">🎈</div>
+          <div class="info"><b>打氣球</b><span>花 5 🪙 玩一次</span></div>
+          <button onclick="playGame('balloon',5)">玩</button>
+        </div>
       </div>
       <div class="msg" id="arcade-msg"></div>
     </div>
@@ -375,6 +380,25 @@
         <div class="race-hitzone race-hitzone-right" id="race-hitzone-right"></div>
       </div>
       <div class="msg" id="race-msg"></div>
+    </div>
+  </div>
+
+  <!-- 打氣球 -->
+  <div class="screen" id="screen-balloon">
+    <div class="topbar">
+      <button class="back-btn" onclick="showScreen('screen-arcade')">← 返回</button>
+      <div class="coin-badge"><span class="icon">🪙</span><span class="coin-count">8</span></div>
+    </div>
+    <div class="card">
+      <h2>打氣球</h2>
+      <p class="sub" style="margin-bottom:0;">聽發音、看國字，戳破寫著正確注音的氣球！</p>
+      <div class="balloon-stats">
+        <span>第 <span id="balloon-round">1</span> / 8 回合</span>
+        <span>戳對：<span id="balloon-score">0</span></span>
+      </div>
+      <div class="balloon-char" id="balloon-char"></div>
+      <div class="balloon-sky" id="balloon-sky"></div>
+      <div class="msg" id="balloon-msg"></div>
     </div>
   </div>
 
