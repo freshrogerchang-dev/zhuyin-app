@@ -87,6 +87,14 @@
   .btn-green:active{box-shadow:0 1px 0 var(--green-dark);}
   .btn:disabled{opacity:.45;cursor:not-allowed;}
 
+  /* 首頁的字體、圖示都比其他畫面再放大一些，方便小朋友辨認 */
+  #screen-home h1{font-size:32px;}
+  #screen-home p.sub{font-size:18px;}
+  #screen-home #home-mascot{font-size:88px;margin-bottom:8px;}
+  #screen-home .btn{font-size:21px;padding:20px;}
+  #screen-home .coin-badge{font-size:28px;padding:10px 20px;}
+  #screen-home .coin-badge .icon{font-size:32px;}
+
   .hanzi-box{
     position:relative;
     background:#FAFBFD;
