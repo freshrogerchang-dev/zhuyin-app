@@ -27,7 +27,7 @@
       <div class="coin-badge"><span class="icon">🪙</span><span id="coin-count-home">8</span></div>
     </div>
     <div class="card">
-      <div class="mascot">🦒</div>
+      <div class="mascot" id="home-mascot">🦒</div>
       <h1>注音筆順練習</h1>
       <p class="sub">寫對國字、認對注音，就能得到金幣<br>金幣可以拿去玩遊戲！</p>
       <button class="btn btn-primary" onclick="openCharSelect()">✏️ 練國字</button>
@@ -35,6 +35,8 @@
       <button class="btn btn-secondary" onclick="startWordPractice()">📚 練詞語</button>
       <button class="btn btn-secondary" onclick="startLetterPractice()">🔠 練英文字母</button>
       <button class="btn btn-secondary" onclick="showScreen('screen-arcade')">🎮 遊戲時間</button>
+      <button class="btn btn-secondary" onclick="showScreen('screen-badges'); renderBadges();">🏅 成就徽章牆</button>
+      <button class="parent-link" onclick="showScreen('screen-parent'); renderParentView();">👨‍👩‍👧 家長專區</button>
     </div>
   </div>
 
@@ -197,6 +199,37 @@
       </div>
       <div class="msg" id="letter-write-msg"></div>
       <button class="btn btn-green" onclick="finishLetterWriting()">✅ 我寫好了</button>
+    </div>
+  </div>
+
+  <!-- 成就徽章牆 -->
+  <div class="screen" id="screen-badges">
+    <div class="topbar">
+      <button class="back-btn" onclick="showScreen('screen-home')">← 返回</button>
+      <div class="coin-badge"><span class="icon">🪙</span><span class="coin-count">8</span></div>
+    </div>
+    <div class="card">
+      <h2>成就徽章牆</h2>
+      <p class="sub" style="margin-bottom:0;">完成任務就能解鎖新造型！</p>
+      <div class="badges-list" id="badges-list"></div>
+    </div>
+  </div>
+
+  <!-- 家長專區 -->
+  <div class="screen" id="screen-parent">
+    <div class="topbar">
+      <button class="back-btn" onclick="showScreen('screen-home')">← 返回</button>
+      <div></div>
+    </div>
+    <div class="card">
+      <h2>家長專區</h2>
+      <p class="sub" style="margin-bottom:0;">查看練習狀況，或管理金幣與紀錄</p>
+      <div id="parent-progress"></div>
+
+      <h2 style="margin-top:18px;">設定</h2>
+      <button class="btn btn-secondary" onclick="resetCoins()">🪙 金幣歸零</button>
+      <button class="btn btn-secondary" onclick="resetProgress()">🗑️ 任務與練習紀錄歸零</button>
+      <div class="msg" id="parent-settings-msg"></div>
     </div>
   </div>
 

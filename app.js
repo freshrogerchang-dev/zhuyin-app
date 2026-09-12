@@ -8,6 +8,11 @@ let progressMap = {}; // key: 字/注音符號 -> {best_reward, perfect_count, a
 
 let currentZhuyinIndex = 0;
 
+// 賽車贏的次數沒有對應到任何一個字/詞/符號，所以借用 zhuyin_app_char_progress
+// 表存成一筆特殊 key 的紀錄(attempt_count 當成勝場數)，避免另外建一張表。
+const STAT_RACE_WINS_KEY = '__stat_race_wins__';
+let raceWinCount = 0;
+
 function syncCoinDisplay(){
   document.getElementById('coin-count-home').textContent = coins;
   document.querySelectorAll('.coin-count').forEach(el => el.textContent = coins);
@@ -24,10 +29,20 @@ async function initFromSupabase(){
   try{
     const { data: rows } = await sb.from('zhuyin_app_char_progress').select('*');
     (rows||[]).forEach(r=>{ progressMap[r.character] = r; });
+    raceWinCount = (progressMap[STAT_RACE_WINS_KEY] && progressMap[STAT_RACE_WINS_KEY].attempt_count) || 0;
   }catch(e){ console.warn('讀取練習紀錄失敗', e); }
 
   syncCoinDisplay();
   renderCharSelectGrid();
+  updateHomeMascot();
+}
+
+function incrementRaceWins(){
+  raceWinCount++;
+  const updated = { character: STAT_RACE_WINS_KEY, best_reward:0, perfect_count:0, attempt_count: raceWinCount, updated_at: new Date().toISOString() };
+  progressMap[STAT_RACE_WINS_KEY] = updated;
+  sb.from('zhuyin_app_char_progress').upsert(updated)
+    .then(({error})=>{ if(error) console.warn('賽車勝場儲存失敗', error); });
 }
 
 function saveCoins(){
@@ -71,6 +86,7 @@ function showScreen(id){
   document.getElementById(id).classList.add('active');
   if(GAME_SCREEN_MUSIC[id]) startGameMusic(GAME_SCREEN_MUSIC[id]);
   else stopGameMusic();
+  if(id === 'screen-home') updateHomeMascot();
 }
 
 function speak(text, lang){
@@ -939,6 +955,203 @@ function finishLetterWriting(){
   showResult(coinReward);
 }
 
+// ---- 成就徽章牆 / 造型解鎖 ----
+// 徽章的進度都是從現有的 progressMap(國字/注音/詞語/字母)跟 raceWinCount
+// 算出來的，不需要另外存一份「達成了哪些成就」，重新整理也不會跑掉。
+function masteredCount(keys){
+  return keys.filter(k => progressMap[k] && progressMap[k].best_reward === 3).length;
+}
+
+const BADGES = [
+  { id:'char5', title:'字詞新手', icon:'🌱', desc:'國字寫對 5 個', target:5, compute:()=> masteredCount(Object.keys(charData)) },
+  { id:'char10', title:'字詞達人', icon:'📖', desc:'國字寫對 10 個', target:10, compute:()=> masteredCount(Object.keys(charData)) },
+  { id:'char25', title:'字詞高手', icon:'🏅', desc:'國字寫對 25 個', target:25, compute:()=> masteredCount(Object.keys(charData)) },
+  { id:'charAll', title:'識字大師', icon:'👑', desc:`國字全部寫對(${Object.keys(charData).length} 個)`, target:Object.keys(charData).length, compute:()=> masteredCount(Object.keys(charData)) },
+  { id:'zhuyin10', title:'注音小尖兵', icon:'🔤', desc:'注音符號寫對 10 個', target:10, compute:()=> masteredCount(zhuyinData.map(z=>z.symbol)) },
+  { id:'zhuyinAll', title:'注音全滿貫', icon:'🎯', desc:`注音符號全部寫對(${zhuyinData.length} 個)`, target:zhuyinData.length, compute:()=> masteredCount(zhuyinData.map(z=>z.symbol)) },
+  { id:'word10', title:'詞語小達人', icon:'📚', desc:'詞語寫對 10 個', target:10, compute:()=> masteredCount(wordData) },
+  { id:'wordAll', title:'詞語全滿貫', icon:'🏆', desc:`詞語全部寫對(${wordData.length} 個)`, target:wordData.length, compute:()=> masteredCount(wordData) },
+  { id:'letter15', title:'字母小達人', icon:'🔠', desc:'英文字母寫對 15 個', target:15, compute:()=> masteredCount(Object.keys(letterData)) },
+  { id:'letterAll', title:'字母全滿貫', icon:'🌟', desc:`英文字母全部寫對(${Object.keys(letterData).length} 個)`, target:Object.keys(letterData).length, compute:()=> masteredCount(Object.keys(letterData)) },
+  { id:'race1', title:'賽車新手', icon:'🚦', desc:'注音賽車贏 1 次', target:1, compute:()=> raceWinCount },
+  { id:'race5', title:'賽車好手', icon:'🏁', desc:'注音賽車贏 5 次', target:5, compute:()=> raceWinCount },
+  { id:'race15', title:'賽車冠軍', icon:'👑', desc:'注音賽車贏 15 次', target:15, compute:()=> raceWinCount }
+];
+
+function isBadgeUnlocked(badgeId){
+  if(!badgeId) return true;
+  const badge = BADGES.find(b=>b.id===badgeId);
+  return badge ? badge.compute() >= badge.target : false;
+}
+
+// 造型解鎖的門檻對應到上面的徽章，達成越多門檻，長頸鹿/賽車顏色就換得越好看。
+const MASCOT_UNLOCKS = [
+  { emoji:'🦒', badgeId:null },
+  { emoji:'🦁', badgeId:'char5' },
+  { emoji:'🐯', badgeId:'char10' },
+  { emoji:'🦄', badgeId:'char25' },
+  { emoji:'🐉', badgeId:'charAll' }
+];
+const CAR_COLOR_UNLOCKS = [
+  { color:'#FF8A5B', badgeId:null },
+  { color:'#4C86E8', badgeId:'race1' },
+  { color:'#B25FE0', badgeId:'race5' },
+  { color:'#F2B705', badgeId:'race15' }
+];
+function currentMascotEmoji(){
+  let chosen = MASCOT_UNLOCKS[0].emoji;
+  MASCOT_UNLOCKS.forEach(m=>{ if(isBadgeUnlocked(m.badgeId)) chosen = m.emoji; });
+  return chosen;
+}
+function currentCarColor(){
+  let chosen = CAR_COLOR_UNLOCKS[0].color;
+  CAR_COLOR_UNLOCKS.forEach(c=>{ if(isBadgeUnlocked(c.badgeId)) chosen = c.color; });
+  return chosen;
+}
+function updateHomeMascot(){
+  const el = document.getElementById('home-mascot');
+  if(el) el.textContent = currentMascotEmoji();
+}
+
+function renderBadges(){
+  const wrap = document.getElementById('badges-list');
+  wrap.innerHTML = '';
+  BADGES.forEach(b=>{
+    const current = Math.min(b.compute(), b.target);
+    const unlocked = current >= b.target;
+
+    const card = document.createElement('div');
+    card.className = 'badge-card' + (unlocked ? ' unlocked' : '');
+
+    const icon = document.createElement('div');
+    icon.className = 'badge-icon';
+    icon.textContent = b.icon;
+
+    const info = document.createElement('div');
+    info.className = 'badge-info';
+    const title = document.createElement('b');
+    title.textContent = b.title;
+    const desc = document.createElement('span');
+    desc.textContent = b.desc;
+    const barWrap = document.createElement('div');
+    barWrap.className = 'badge-progress-bar';
+    const bar = document.createElement('div');
+    bar.className = 'badge-progress-fill';
+    bar.style.width = (current/b.target*100) + '%';
+    barWrap.appendChild(bar);
+    const progText = document.createElement('span');
+    progText.className = 'badge-progress-text';
+    progText.textContent = `${current} / ${b.target}`;
+    info.appendChild(title);
+    info.appendChild(desc);
+    info.appendChild(barWrap);
+    info.appendChild(progText);
+
+    const status = document.createElement('div');
+    status.className = 'badge-status';
+    status.textContent = unlocked ? '✅' : '🔒';
+
+    card.appendChild(icon);
+    card.appendChild(info);
+    card.appendChild(status);
+    wrap.appendChild(card);
+  });
+}
+
+// ---- 家長專區：練習狀況總覽 + 設定 ----
+function renderParentSection(container, title, keys){
+  const mastered = keys.filter(k => progressMap[k] && progressMap[k].best_reward === 3);
+  const needsWork = keys.filter(k => progressMap[k] && progressMap[k].attempt_count > 0 && progressMap[k].best_reward < 3);
+  const untried = keys.length - mastered.length - needsWork.length;
+
+  const section = document.createElement('div');
+  section.className = 'parent-section';
+
+  const h3 = document.createElement('h3');
+  h3.textContent = title;
+  section.appendChild(h3);
+
+  const summary = document.createElement('div');
+  summary.className = 'summary';
+  summary.textContent = `已熟練 ${mastered.length} 個・待加強 ${needsWork.length} 個・還沒練過 ${untried} 個(共 ${keys.length} 個)`;
+  section.appendChild(summary);
+
+  if(mastered.length){
+    const label = document.createElement('div');
+    label.className = 'chip-label';
+    label.textContent = '已熟練';
+    section.appendChild(label);
+    const list = document.createElement('div');
+    list.className = 'chip-list';
+    mastered.forEach(k=>{
+      const chip = document.createElement('span');
+      chip.className = 'chip mastered';
+      chip.textContent = k;
+      list.appendChild(chip);
+    });
+    section.appendChild(list);
+  }
+
+  if(needsWork.length){
+    const label = document.createElement('div');
+    label.className = 'chip-label';
+    label.textContent = '待加強(常常寫錯或還不夠熟)';
+    section.appendChild(label);
+    const list = document.createElement('div');
+    list.className = 'chip-list';
+    needsWork.forEach(k=>{
+      const chip = document.createElement('span');
+      chip.className = 'chip needs-work';
+      chip.textContent = k;
+      list.appendChild(chip);
+    });
+    section.appendChild(list);
+  }
+
+  container.appendChild(section);
+}
+
+function renderParentView(){
+  const wrap = document.getElementById('parent-progress');
+  wrap.innerHTML = '';
+  renderParentSection(wrap, '國字', Object.keys(charData));
+  renderParentSection(wrap, '注音符號', zhuyinData.map(z=>z.symbol));
+  renderParentSection(wrap, '詞語', wordData);
+  renderParentSection(wrap, '英文字母', Object.keys(letterData));
+  document.getElementById('parent-settings-msg').textContent = '';
+}
+
+function resetCoins(){
+  if(!confirm('確定要把金幣歸零嗎？')) return;
+  if(!confirm('再次確認：金幣歸零後沒辦法復原，確定要繼續嗎？')) return;
+  coins = 0;
+  syncCoinDisplay();
+  saveCoins();
+  document.getElementById('parent-settings-msg').textContent = '金幣已經歸零了。';
+}
+
+function resetProgress(){
+  if(!confirm('確定要把所有練習紀錄跟成就進度都歸零嗎？')) return;
+  if(!confirm('再次確認：這樣會清除所有已熟練的字、詞、注音、字母紀錄，還有賽車勝場，沒辦法復原，確定要繼續嗎？')) return;
+  // 資料庫目前只開放 insert/select/update 的權限(沒有 delete)，所以用「把每一筆
+  // 都歸零」取代「刪除整張表」，效果一樣(歸零後跟沒練過沒兩樣)，也不用另外調整權限。
+  sb.from('zhuyin_app_char_progress')
+    .update({ best_reward:0, perfect_count:0, attempt_count:0, last_reward:0, updated_at:new Date().toISOString() })
+    .gte('attempt_count', 0)
+    .then(({error})=>{
+      if(error){
+        console.warn('進度歸零失敗', error);
+        document.getElementById('parent-settings-msg').textContent = '歸零失敗，請稍後再試一次。';
+        return;
+      }
+      progressMap = {};
+      raceWinCount = 0;
+      renderCharSelectGrid();
+      updateHomeMascot();
+      document.getElementById('parent-settings-msg').textContent = '所有練習紀錄跟成就進度都已經歸零了。';
+    });
+}
+
 // ---- 遊戲大廳 ----
 function playGame(game, cost){
   if(coins < cost){
@@ -1161,6 +1374,7 @@ function startRace(){
   raceLocked = false;
   document.getElementById('race-msg').textContent = '';
   document.getElementById('race-car-player').style.left = '25%';
+  document.getElementById('race-car-player').style.setProperty('--race-player-color', currentCarColor());
   document.getElementById('race-hitzone-left').onclick = () => pickRaceAnswer('left');
   document.getElementById('race-hitzone-right').onclick = () => pickRaceAnswer('right');
   document.addEventListener('keydown', handleRaceKeydown);
@@ -1224,6 +1438,7 @@ function finishRace(){
   let msg;
   if(raceProgress > raceRivalProgress){
     playRaceWinSound();
+    incrementRaceWins();
     msg = '衝過終點線，你贏了！🏆';
   } else if(raceProgress === raceRivalProgress){
     msg = '你們同時衝線，打成平手！握手言和 🤝';

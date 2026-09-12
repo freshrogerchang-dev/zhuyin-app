@@ -270,8 +270,50 @@
   }
   #race-car-rival .race-car-svg{ width:22px; }
   .race-car-body{ fill:var(--coral); }
+  #race-car-player .race-car-body{ fill:var(--race-player-color, var(--coral)); }
   #race-car-rival .race-car-body{ fill:var(--green); }
   @keyframes race-car-bob{
     from{ transform:translateY(0); }
     to{ transform:translateY(-3px); }
   }
+
+  .parent-link{
+    background:none;border:none;color:#8792a6;font-size:12px;
+    margin-top:14px;cursor:pointer;text-decoration:underline;
+    font-family:'Noto Sans TC',sans-serif;
+  }
+
+  .badges-list{
+    width:100%;max-height:420px;overflow-y:auto;
+    display:flex;flex-direction:column;gap:12px;margin-top:10px;padding:2px;
+  }
+  .badge-card{
+    border:3px solid var(--ink);border-radius:20px;padding:14px;
+    display:flex;align-items:center;gap:12px;text-align:left;
+    background:#F3F6FB;opacity:.7;
+  }
+  .badge-card.unlocked{background:white;opacity:1;}
+  .badge-icon{font-size:32px;flex-shrink:0;}
+  .badge-info{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0;}
+  .badge-info b{font-size:15px;}
+  .badge-info span{font-size:12px;color:#5a6478;}
+  .badge-progress-bar{
+    background:#E4E9F2;border-radius:999px;height:8px;overflow:hidden;margin-top:2px;
+  }
+  .badge-progress-fill{background:var(--green);height:100%;border-radius:999px;transition:width .3s ease;}
+  .badge-card.unlocked .badge-progress-fill{background:var(--sun);}
+  .badge-progress-text{font-size:11px;color:#8792a6;}
+  .badge-status{font-size:22px;flex-shrink:0;}
+
+  #parent-progress{width:100%;display:flex;flex-direction:column;}
+  .parent-section{width:100%;text-align:left;margin-top:14px;}
+  .parent-section h3{font-size:15px;margin:0 0 4px;}
+  .parent-section .summary{font-size:12px;color:#5a6478;margin-bottom:6px;}
+  .chip-label{font-size:12px;font-weight:700;color:#5a6478;margin:6px 0 4px;}
+  .chip-list{display:flex;flex-wrap:wrap;gap:6px;max-height:110px;overflow-y:auto;}
+  .chip{
+    border:2px solid var(--ink);border-radius:999px;padding:4px 10px;
+    font-size:13px;font-weight:700;background:white;
+  }
+  .chip.mastered{background:var(--green);color:white;border-color:var(--green-dark);}
+  .chip.needs-work{background:#FFE3D3;border-color:var(--coral-dark);}
