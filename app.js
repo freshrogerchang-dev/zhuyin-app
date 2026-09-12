@@ -713,6 +713,8 @@ let letterCanvas, letterCtx, letterDrawing = false;
 let letterGlyphPoints = [];
 let letterUserPoints = [];
 let letterGuideAlpha = 0.18;
+let letterAutoFinishTimer = null;
+let letterStrokeAttempts = 0;
 
 function startLetterPractice(){
   currentLetter = pickWeightedFrom(Object.keys(letterData));
@@ -772,16 +774,19 @@ function animateLetterStroke(strokeIndex, strokes){
 }
 
 function setupLetterWrite(){
+  clearTimeout(letterAutoFinishTimer);
   letterCanvas = document.getElementById('letter-write-canvas');
   letterCtx = letterCanvas.getContext('2d');
   letterGuideAlpha = 0.18;
   letterUserPoints = [];
+  letterStrokeAttempts = 0;
   document.getElementById('letter-write-msg').textContent = '';
   buildLetterGlyphMask();
   drawLetterGuide();
 
   letterCanvas.onpointerdown = e => {
     e.preventDefault();
+    clearTimeout(letterAutoFinishTimer);
     letterCanvas.setPointerCapture(e.pointerId);
     letterDrawing = true;
     const p = letterPos(e);
@@ -801,10 +806,30 @@ function setupLetterWrite(){
     letterCtx.lineJoin = 'round';
     letterCtx.stroke();
   };
-  letterCanvas.onpointerup = e => { e.preventDefault(); letterDrawing = false; };
+  letterCanvas.onpointerup = e => {
+    e.preventDefault();
+    letterDrawing = false;
+    letterStrokeAttempts++;
+    clearTimeout(letterAutoFinishTimer);
+    letterAutoFinishTimer = setTimeout(checkLetterAutoFinish, 900);
+  };
   letterCanvas.onpointercancel = e => { e.preventDefault(); letterDrawing = false; };
   letterCanvas.ontouchstart = e => e.preventDefault();
   letterCanvas.ontouchmove = e => e.preventDefault();
+}
+
+// 寫完停筆一小段時間後就自動完成，不用特別按「我寫好了」。
+// 只看「覆蓋率」不太準：像 A 的兩畫撇捺共用同一個頂點，光寫這兩畫
+// 覆蓋率就有九成，會誤判成「已經寫完」但其實還少一橫。所以改成同時
+// 檢查「已經抬筆幾次」有沒有達到這個字母該有的筆畫數，比對筆畫數
+// 更可靠，覆蓋率只當作「不是隨便點一下」的門檻。
+function checkLetterAutoFinish(){
+  if(letterUserPoints.length < 10) return;
+  if(letterStrokeAttempts < letterData[currentLetter].strokes.length) return;
+  const { coverage } = computeLetterScore();
+  if(coverage >= 0.4){
+    finishLetterWriting();
+  }
 }
 
 function letterPos(e){
@@ -858,24 +883,23 @@ function drawLetterGuide(){
 }
 
 function clearLetterCanvas(){
+  clearTimeout(letterAutoFinishTimer);
   letterGuideAlpha = 0.18;
   letterUserPoints = [];
+  letterStrokeAttempts = 0;
   drawLetterGuide();
   document.getElementById('letter-write-msg').textContent = '';
 }
 
 function hintLetter(){
+  clearTimeout(letterAutoFinishTimer);
   letterGuideAlpha = 0.4;
   letterUserPoints = [];
   drawLetterGuide();
   document.getElementById('letter-write-msg').textContent = '提示：照著明顯一點的字母描寫看看！';
 }
 
-function finishLetterWriting(){
-  if(letterUserPoints.length < 10){
-    alert('請先照著淡淡的字母描一次喔！');
-    return;
-  }
+function computeLetterScore(){
   const tol = 16 * (letterCanvas.width/260);
   let coveredCount = 0;
   for(const gp of letterGlyphPoints){
@@ -897,7 +921,16 @@ function finishLetterWriting(){
   }
   const accuracy = letterUserPoints.length ? accCount/letterUserPoints.length : 0;
 
-  const score = coverage*0.6 + accuracy*0.4;
+  return { coverage, accuracy, score: coverage*0.6 + accuracy*0.4 };
+}
+
+function finishLetterWriting(){
+  clearTimeout(letterAutoFinishTimer);
+  if(letterUserPoints.length < 10){
+    alert('請先照著淡淡的字母描一次喔！');
+    return;
+  }
+  const { score } = computeLetterScore();
   let coinReward;
   if(score >= 0.55) coinReward = 3;
   else if(score >= 0.3) coinReward = 2;
