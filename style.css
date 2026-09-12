@@ -119,6 +119,9 @@
     -webkit-user-select:none;
     user-select:none;
   }
+  .letter-intro-wrap{
+    position:relative;margin:0 auto;
+  }
   .zhuyin-symbol-big{font-size:110px;font-weight:900;line-height:1;margin:6px 0;}
 
   .word-display{

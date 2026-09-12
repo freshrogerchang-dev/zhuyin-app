@@ -173,7 +173,9 @@
     </div>
     <div class="card">
       <p class="sub" style="margin-bottom:6px;">來認識這個字母</p>
-      <canvas class="zhuyin-canvas" id="letter-intro-canvas" width="260" height="260"></canvas>
+      <div class="letter-intro-wrap" id="letter-intro-box" style="width:260px;height:260px;">
+        <canvas class="zhuyin-canvas" id="letter-intro-canvas" width="260" height="260"></canvas>
+      </div>
       <button class="btn btn-secondary" onclick="replayLetterIntro()">🔁 再看一次筆順</button>
       <button class="btn btn-secondary" onclick="speak(currentLetter,'en-US')">🔊 聽發音</button>
       <button class="btn btn-primary" onclick="showScreen('screen-letter-write'); setupLetterWrite();">下一步：寫寫看</button>

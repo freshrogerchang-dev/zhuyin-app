@@ -724,7 +724,22 @@ function startLetterPractice(){
 function setupLetterIntro(){
   letterIntroCanvas = document.getElementById('letter-intro-canvas');
   letterIntroCtx = letterIntroCanvas.getContext('2d');
+  addLetterStrokeNumberLabels();
   replayLetterIntro();
+}
+
+function addLetterStrokeNumberLabels(){
+  const box = document.getElementById('letter-intro-box');
+  box.querySelectorAll('.stroke-num-badge').forEach(b => b.remove());
+  letterData[currentLetter].strokes.forEach((stroke, i)=>{
+    const [sx, sy] = letterPt(stroke[0]);
+    const badge = document.createElement('div');
+    badge.className = 'stroke-num-badge';
+    badge.textContent = i + 1;
+    badge.style.left = sx + 'px';
+    badge.style.top = sy + 'px';
+    box.appendChild(badge);
+  });
 }
 
 function replayLetterIntro(){
