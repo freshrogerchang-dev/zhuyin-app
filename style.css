@@ -374,7 +374,7 @@
     border:3px solid var(--ink);border-radius:18px;
   }
   .balloon{
-    position:absolute;bottom:-70px;
+    position:absolute;bottom:-70px;transform:translateX(-50%);
     display:flex;flex-direction:column;align-items:center;
     cursor:pointer;user-select:none;-webkit-user-select:none;
   }
@@ -384,4 +384,4 @@
     padding:2px 8px;font-size:14px;font-weight:900;color:var(--ink);white-space:nowrap;
   }
   .balloon.pop{animation:balloon-pop .25s ease forwards;}
-  @keyframes balloon-pop{ to{ transform:scale(1.6); opacity:0; } }
+  @keyframes balloon-pop{ to{ transform:translateX(-50%) scale(1.6); opacity:0; } }
