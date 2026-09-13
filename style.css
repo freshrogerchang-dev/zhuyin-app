@@ -94,6 +94,9 @@
   #screen-home .btn{font-size:21px;padding:20px;}
   #screen-home .coin-badge{font-size:28px;padding:10px 20px;}
   #screen-home .coin-badge .icon{font-size:32px;}
+  .streak-line{font-weight:700;margin:-10px 0 16px;min-height:1em;}
+  .streak-line.active{color:var(--coral-dark);}
+  .streak-line.cold{color:#8792a6;}
 
   .hanzi-box{
     position:relative;

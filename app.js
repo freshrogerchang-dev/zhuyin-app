@@ -13,6 +13,19 @@ let currentZhuyinIndex = 0;
 const STAT_RACE_WINS_KEY = '__stat_race_wins__';
 let raceWinCount = 0;
 
+// 連續打卡天數也借用同一張表存成特殊 key：
+// best_reward 當「目前連續天數」、perfect_count 當「歷史最高連續天數」、
+// updated_at 當「最後一次練習的時間」，一樣不用另外建表或改欄位。
+const STAT_STREAK_KEY = '__stat_streak__';
+let currentStreak = 0;
+let bestStreak = 0;
+let lastPracticeDateStr = null; // 'YYYY-MM-DD'，用裝置本地時間，不是 UTC
+
+function localDateStr(d){
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
 function syncCoinDisplay(){
   document.getElementById('coin-count-home').textContent = coins;
   document.querySelectorAll('.coin-count').forEach(el => el.textContent = coins);
@@ -30,11 +43,56 @@ async function initFromSupabase(){
     const { data: rows } = await sb.from('zhuyin_app_char_progress').select('*');
     (rows||[]).forEach(r=>{ progressMap[r.character] = r; });
     raceWinCount = (progressMap[STAT_RACE_WINS_KEY] && progressMap[STAT_RACE_WINS_KEY].attempt_count) || 0;
+    const streakRow = progressMap[STAT_STREAK_KEY];
+    if(streakRow){
+      currentStreak = streakRow.best_reward || 0;
+      bestStreak = streakRow.perfect_count || 0;
+      lastPracticeDateStr = streakRow.updated_at ? localDateStr(new Date(streakRow.updated_at)) : null;
+    }
   }catch(e){ console.warn('讀取練習紀錄失敗', e); }
 
   syncCoinDisplay();
   renderCharSelectGrid();
   updateHomeMascot();
+  updateHomeStreakDisplay();
+}
+
+// 每天第一次完成練習(不管是國字/注音/詞語/字母)才會累加一次，同一天內
+// 重複練習不會一直加。連續兩天都有練習(昨天有、今天也有)才算連續，
+// 中間斷過一天以上就從 1 重新算，最高紀錄(bestStreak)則永遠不會下降。
+function updateDailyStreak(){
+  const todayStr = localDateStr(new Date());
+  if(lastPracticeDateStr === todayStr) return;
+  const yesterdayStr = localDateStr(new Date(Date.now() - 86400000));
+  currentStreak = (lastPracticeDateStr === yesterdayStr) ? currentStreak + 1 : 1;
+  if(currentStreak > bestStreak) bestStreak = currentStreak;
+  lastPracticeDateStr = todayStr;
+  const updated = { character: STAT_STREAK_KEY, best_reward: currentStreak, perfect_count: bestStreak, attempt_count: 0, updated_at: new Date().toISOString() };
+  progressMap[STAT_STREAK_KEY] = updated;
+  sb.from('zhuyin_app_char_progress').upsert(updated)
+    .then(({error})=>{ if(error) console.warn('連續天數儲存失敗', error); });
+  updateHomeStreakDisplay();
+}
+
+function updateHomeStreakDisplay(){
+  const el = document.getElementById('home-streak');
+  if(!el) return;
+  if(!lastPracticeDateStr){
+    el.textContent = '';
+    el.className = 'sub streak-line';
+    return;
+  }
+  const daysSince = Math.round((new Date(localDateStr(new Date())) - new Date(lastPracticeDateStr)) / 86400000);
+  if(daysSince <= 0){
+    el.textContent = `🔥 連續練習 ${currentStreak} 天，今天已經練習囉！`;
+    el.className = 'sub streak-line active';
+  } else if(daysSince === 1){
+    el.textContent = `🔥 連續練習 ${currentStreak} 天，今天還沒練習，繼續保持吧！`;
+    el.className = 'sub streak-line active';
+  } else {
+    el.textContent = `😴 已經 ${daysSince} 天沒來練習囉，快回來玩吧！`;
+    el.className = 'sub streak-line cold';
+  }
 }
 
 function incrementRaceWins(){
@@ -63,10 +121,15 @@ function recordProgress(key, coinReward){
   progressMap[key] = updated;
   sb.from('zhuyin_app_char_progress').upsert(updated)
     .then(({error})=>{ if(error) console.warn('進度儲存失敗', error); });
+  updateDailyStreak();
 }
 
-// 已經寫得很熟(滿分次數多)的字，被抽到的權重越低
+// 已經寫得很熟(滿分次數多)的字，被抽到的權重越低，這是基本盤。
+// 在這之上再做一層簡單的間隔複習：字練過一段時間沒再複習，權重就
+// 慢慢加回來，練得越熟的字可以「撐」比較久才需要複習(模擬遺忘曲線)，
+// 這樣才不會練到滿分之後就再也不會被抽到、結果隔了很久反而忘記。
 function pickWeightedFrom(keys){
+  const now = Date.now();
   const weighted = [];
   keys.forEach(k=>{
     const p = progressMap[k];
@@ -75,6 +138,13 @@ function pickWeightedFrom(keys){
     else if(p.best_reward < 3) weight = 4;         // 練過但沒滿分過
     else if(p.perfect_count === 1) weight = 2;     // 滿分過一次
     else weight = 1;                               // 滿分很多次：仍會出現，但機率最低
+
+    if(p && p.updated_at){
+      const daysSince = (now - new Date(p.updated_at).getTime()) / 86400000;
+      const dueAfterDays = p.best_reward < 3 ? 2 : (p.perfect_count >= 2 ? 14 : 7);
+      const overdueRatio = daysSince / dueAfterDays;
+      if(overdueRatio > 1) weight += Math.min(6, Math.floor(overdueRatio * 2));
+    }
     for(let i=0;i<weight;i++) weighted.push(k);
   });
   return weighted[Math.floor(Math.random()*weighted.length)];
@@ -86,7 +156,7 @@ function showScreen(id){
   document.getElementById(id).classList.add('active');
   if(GAME_SCREEN_MUSIC[id]) startGameMusic(GAME_SCREEN_MUSIC[id]);
   else stopGameMusic();
-  if(id === 'screen-home') updateHomeMascot();
+  if(id === 'screen-home'){ updateHomeMascot(); updateHomeStreakDisplay(); }
 }
 
 function speak(text, lang){
@@ -1045,7 +1115,10 @@ const BADGES = [
   { id:'letterAll', title:'字母全滿貫', icon:'🌟', desc:`英文字母全部寫對(${Object.keys(letterData).length} 個)`, target:Object.keys(letterData).length, compute:()=> masteredCount(Object.keys(letterData)) },
   { id:'race1', title:'賽車新手', icon:'🚦', desc:'注音賽車贏 1 次', target:1, compute:()=> raceWinCount },
   { id:'race5', title:'賽車好手', icon:'🏁', desc:'注音賽車贏 5 次', target:5, compute:()=> raceWinCount },
-  { id:'race15', title:'賽車冠軍', icon:'👑', desc:'注音賽車贏 15 次', target:15, compute:()=> raceWinCount }
+  { id:'race15', title:'賽車冠軍', icon:'👑', desc:'注音賽車贏 15 次', target:15, compute:()=> raceWinCount },
+  { id:'streak3', title:'堅持不懈', icon:'✨', desc:'連續練習 3 天', target:3, compute:()=> bestStreak },
+  { id:'streak7', title:'連續打卡一週', icon:'🔥', desc:'連續練習 7 天', target:7, compute:()=> bestStreak },
+  { id:'streak30', title:'打卡王', icon:'💎', desc:'連續練習 30 天', target:30, compute:()=> bestStreak }
 ];
 
 function isBadgeUnlocked(badgeId){
@@ -1202,7 +1275,7 @@ function resetCoins(){
 
 function resetProgress(){
   if(!confirm('確定要把所有練習紀錄跟成就進度都歸零嗎？')) return;
-  if(!confirm('再次確認：這樣會清除所有已熟練的字、詞、注音、字母紀錄，還有賽車勝場，沒辦法復原，確定要繼續嗎？')) return;
+  if(!confirm('再次確認：這樣會清除所有已熟練的字、詞、注音、字母紀錄，還有賽車勝場、連續打卡天數，沒辦法復原，確定要繼續嗎？')) return;
   // 資料庫目前只開放 insert/select/update 的權限(沒有 delete)，所以用「把每一筆
   // 都歸零」取代「刪除整張表」，效果一樣(歸零後跟沒練過沒兩樣)，也不用另外調整權限。
   sb.from('zhuyin_app_char_progress')
@@ -1216,8 +1289,12 @@ function resetProgress(){
       }
       progressMap = {};
       raceWinCount = 0;
+      currentStreak = 0;
+      bestStreak = 0;
+      lastPracticeDateStr = null;
       renderCharSelectGrid();
       updateHomeMascot();
+      updateHomeStreakDisplay();
       document.getElementById('parent-settings-msg').textContent = '所有練習紀錄跟成就進度都已經歸零了。';
     });
 }
