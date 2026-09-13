@@ -109,6 +109,18 @@
     -webkit-user-select:none;
     user-select:none;
   }
+  .component-hint{
+    display:none;width:100%;background:#F3F6FB;border:2px dashed #B9C3D4;
+    border-radius:14px;padding:10px 12px;margin:4px 0 8px;text-align:center;
+  }
+  .component-hint.show{display:block;}
+  .component-row{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;}
+  .component-tile{
+    background:white;border:2px solid var(--ink);border-radius:10px;
+    padding:6px 12px;font-size:22px;font-weight:900;color:var(--ink);
+  }
+  .component-plus{font-size:20px;font-weight:900;color:#8792a6;}
+  .component-note{font-size:12px;color:#5a6478;margin:6px 0 0;}
   .stroke-num-badge{
     position:absolute;
     transform:translate(-50%,-50%);
@@ -292,6 +304,31 @@
     background:none;border:none;color:#8792a6;font-size:12px;
     margin-top:14px;cursor:pointer;text-decoration:underline;
     font-family:'Noto Sans TC',sans-serif;
+  }
+
+  .profile-badge{
+    background:white;border:3px solid var(--ink);border-radius:999px;
+    padding:8px 16px;font-weight:900;font-size:15px;color:var(--ink);
+    cursor:pointer;font-family:'Noto Sans TC',sans-serif;
+    max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .profile-list{width:100%;display:flex;flex-direction:column;gap:12px;margin-top:10px;}
+  .profile-tile{
+    border:3px solid var(--ink);border-radius:20px;padding:16px;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    text-align:left;cursor:pointer;background:white;
+  }
+  .profile-tile.active{background:var(--sun);}
+  .profile-tile.empty{
+    justify-content:center;color:#8792a6;font-weight:700;font-size:15px;
+    border-style:dashed;background:none;
+  }
+  .profile-tile-info{display:flex;flex-direction:column;gap:2px;}
+  .profile-tile-info b{font-size:17px;}
+  .profile-tile-info span{font-size:12px;color:#5a6478;}
+  .profile-rename-btn{
+    background:white;border:2px solid var(--ink);border-radius:10px;
+    padding:6px 10px;font-size:16px;cursor:pointer;flex-shrink:0;
   }
 
   .badges-list{

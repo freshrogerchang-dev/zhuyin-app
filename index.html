@@ -23,7 +23,7 @@
   <!-- 首頁 -->
   <div class="screen active" id="screen-home">
     <div class="topbar">
-      <div></div>
+      <button class="profile-badge" onclick="showScreen('screen-profile'); renderProfileScreen();">👤 <span id="active-profile-name">小朋友</span></button>
       <div class="coin-badge"><span class="icon">🪙</span><span id="coin-count-home">8</span></div>
     </div>
     <div class="card">
@@ -64,6 +64,10 @@
     <div class="card">
       <p class="sub" style="margin-bottom:6px;">來認識這個字</p>
       <div class="hanzi-box" id="intro-hanzi" style="width:220px;height:220px;"></div>
+      <div class="component-hint" id="component-hint">
+        <div class="component-row" id="component-row"></div>
+        <p class="component-note" id="component-note"></p>
+      </div>
       <button class="btn btn-secondary" onclick="replayIntro()">🔁 再看一次筆順</button>
       <button class="btn btn-secondary" onclick="speak(currentChar)">🔊 聽發音</button>
       <button class="btn btn-primary" onclick="showScreen('screen-listen')">下一步：聽聽看</button>
@@ -231,6 +235,19 @@
       <button class="btn btn-secondary" onclick="resetCoins()">🪙 金幣歸零</button>
       <button class="btn btn-secondary" onclick="resetProgress()">🗑️ 任務與練習紀錄歸零</button>
       <div class="msg" id="parent-settings-msg"></div>
+    </div>
+  </div>
+
+  <!-- 選擇小朋友(多小孩檔案) -->
+  <div class="screen" id="screen-profile">
+    <div class="topbar">
+      <button class="back-btn" onclick="showScreen('screen-home')">← 返回</button>
+      <div></div>
+    </div>
+    <div class="card">
+      <h2>選擇小朋友</h2>
+      <p class="sub" style="margin-bottom:0;">每個小朋友都有自己的金幣、進度跟成就，最多可以有 4 個人</p>
+      <div class="profile-list" id="profile-list"></div>
     </div>
   </div>
 

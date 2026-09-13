@@ -26,6 +26,122 @@ function localDateStr(d){
   return `${y}-${m}-${day}`;
 }
 
+// ---- 多小孩檔案 ----
+// zhuyin_app_state 只能存 id=1 那一列(資料庫有 CHECK (id=1) 的限制)，
+// 所以完全不動那張表的結構：檔案 1 繼續用原本的 zhuyin_app_state，
+// 跟以前的資料完全相容；檔案 2~4 是新加的，金幣也借用
+// zhuyin_app_char_progress 表存成一筆特殊 key(跟賽車勝場、連續天數
+// 一樣的做法)。每個非預設檔案的所有 key 都會加上 "p2_"/"p3_"/"p4_"
+// 前綴，讀取時再依前綴分流、還原成一般的 key，其他程式碼完全不用
+//知道現在是哪個檔案，只要讀寫 progressMap 就好。
+const PROFILE_SLOTS = [1, 2, 3, 4];
+const STAT_COINS_KEY = '__stat_coins__';
+let activeProfileId = 1;
+let profileNames = {};
+
+function loadProfilesFromStorage(){
+  try{
+    const savedId = parseInt(localStorage.getItem('zhuyin_active_profile') || '1', 10);
+    activeProfileId = PROFILE_SLOTS.includes(savedId) ? savedId : 1;
+  }catch(e){ activeProfileId = 1; }
+  try{
+    profileNames = JSON.parse(localStorage.getItem('zhuyin_profile_names') || '{}');
+  }catch(e){ profileNames = {}; }
+}
+function saveProfileNames(){
+  try{ localStorage.setItem('zhuyin_profile_names', JSON.stringify(profileNames)); }
+  catch(e){ /* 存不進去就算了，不影響當次使用 */ }
+}
+function setActiveProfileId(id){
+  activeProfileId = id;
+  try{ localStorage.setItem('zhuyin_active_profile', String(id)); }
+  catch(e){ /* 忽略，頂多下次開啟要重新選 */ }
+}
+function profileKey(rawKey){
+  return activeProfileId === 1 ? rawKey : `p${activeProfileId}_${rawKey}`;
+}
+// 判斷資料庫裡這一筆 character 屬不屬於目前使用的檔案，是的話還原成
+// 不帶前綴的 key；不是的話回傳 null(代表要忽略，是別的小孩的資料)。
+function rawKeyForRow(character){
+  if(activeProfileId === 1){
+    return /^p[2-4]_/.test(character) ? null : character;
+  }
+  const prefix = `p${activeProfileId}_`;
+  return character.startsWith(prefix) ? character.slice(prefix.length) : null;
+}
+function currentProfileName(){
+  return profileNames[activeProfileId] || '小朋友';
+}
+function updateActiveProfileLabel(){
+  const el = document.getElementById('active-profile-name');
+  if(el) el.textContent = currentProfileName();
+}
+
+async function switchProfile(id){
+  setActiveProfileId(id);
+  progressMap = {};
+  coins = 8;
+  raceWinCount = 0;
+  currentStreak = 0;
+  bestStreak = 0;
+  lastPracticeDateStr = null;
+  await initFromSupabase();
+  showScreen('screen-home');
+}
+
+function renderProfileScreen(){
+  const wrap = document.getElementById('profile-list');
+  wrap.innerHTML = '';
+  PROFILE_SLOTS.forEach(id=>{
+    // 檔案 1 是原本就有的資料(還沒改成多檔案之前就存在)，就算還沒特別
+    // 取名字，也不能顯示成「空的、可以新增」，不然會看起來像要蓋掉舊資料。
+    const name = id === 1 ? (profileNames[1] || '小朋友') : profileNames[id];
+    const tile = document.createElement('div');
+    tile.className = 'profile-tile' + (id === activeProfileId ? ' active' : '') + (name ? '' : ' empty');
+
+    if(name){
+      const info = document.createElement('div');
+      info.className = 'profile-tile-info';
+      const nameEl = document.createElement('b');
+      nameEl.textContent = name;
+      info.appendChild(nameEl);
+      if(id === activeProfileId){
+        const tag = document.createElement('span');
+        tag.textContent = '目前使用中';
+        info.appendChild(tag);
+      }
+      tile.appendChild(info);
+      tile.onclick = () => { if(id !== activeProfileId) switchProfile(id); };
+
+      const rename = document.createElement('button');
+      rename.className = 'profile-rename-btn';
+      rename.textContent = '✏️';
+      rename.onclick = (e)=>{
+        e.stopPropagation();
+        const newName = prompt('幫這個小朋友取個名字：', name);
+        if(newName && newName.trim()){
+          profileNames[id] = newName.trim();
+          saveProfileNames();
+          renderProfileScreen();
+          updateActiveProfileLabel();
+        }
+      };
+      tile.appendChild(rename);
+    } else {
+      tile.textContent = '➕ 新增小朋友';
+      tile.onclick = () => {
+        const newName = prompt('這個小朋友叫什麼名字？');
+        if(newName && newName.trim()){
+          profileNames[id] = newName.trim();
+          saveProfileNames();
+          switchProfile(id);
+        }
+      };
+    }
+    wrap.appendChild(tile);
+  });
+}
+
 function syncCoinDisplay(){
   document.getElementById('coin-count-home').textContent = coins;
   document.querySelectorAll('.coin-count').forEach(el => el.textContent = coins);
@@ -33,15 +149,25 @@ function syncCoinDisplay(){
 
 // ---- Supabase：讀取/寫入進度與金幣 ----
 async function initFromSupabase(){
-  try{
-    const { data: stateRow } = await sb.from('zhuyin_app_state').select('*').eq('id',1).maybeSingle();
-    if(stateRow){ coins = stateRow.coins; }
-    else{ await sb.from('zhuyin_app_state').insert({id:1, coins:8}); coins = 8; }
-  }catch(e){ console.warn('讀取金幣失敗，先用本機預設值', e); }
+  if(activeProfileId === 1){
+    try{
+      const { data: stateRow } = await sb.from('zhuyin_app_state').select('*').eq('id',1).maybeSingle();
+      if(stateRow){ coins = stateRow.coins; }
+      else{ await sb.from('zhuyin_app_state').insert({id:1, coins:8}); coins = 8; }
+    }catch(e){ console.warn('讀取金幣失敗，先用本機預設值', e); }
+  }
 
   try{
     const { data: rows } = await sb.from('zhuyin_app_char_progress').select('*');
-    (rows||[]).forEach(r=>{ progressMap[r.character] = r; });
+    (rows||[]).forEach(r=>{
+      const rawKey = rawKeyForRow(r.character);
+      if(rawKey === null) return;
+      if(activeProfileId !== 1 && rawKey === STAT_COINS_KEY){
+        coins = r.best_reward;
+        return;
+      }
+      progressMap[rawKey] = {...r, character: rawKey};
+    });
     raceWinCount = (progressMap[STAT_RACE_WINS_KEY] && progressMap[STAT_RACE_WINS_KEY].attempt_count) || 0;
     const streakRow = progressMap[STAT_STREAK_KEY];
     if(streakRow){
@@ -55,6 +181,7 @@ async function initFromSupabase(){
   renderCharSelectGrid();
   updateHomeMascot();
   updateHomeStreakDisplay();
+  updateActiveProfileLabel();
 }
 
 // 每天第一次完成練習(不管是國字/注音/詞語/字母)才會累加一次，同一天內
@@ -67,9 +194,9 @@ function updateDailyStreak(){
   currentStreak = (lastPracticeDateStr === yesterdayStr) ? currentStreak + 1 : 1;
   if(currentStreak > bestStreak) bestStreak = currentStreak;
   lastPracticeDateStr = todayStr;
-  const updated = { character: STAT_STREAK_KEY, best_reward: currentStreak, perfect_count: bestStreak, attempt_count: 0, updated_at: new Date().toISOString() };
-  progressMap[STAT_STREAK_KEY] = updated;
-  sb.from('zhuyin_app_char_progress').upsert(updated)
+  const logical = { character: STAT_STREAK_KEY, best_reward: currentStreak, perfect_count: bestStreak, attempt_count: 0, updated_at: new Date().toISOString() };
+  progressMap[STAT_STREAK_KEY] = logical;
+  sb.from('zhuyin_app_char_progress').upsert({...logical, character: profileKey(STAT_STREAK_KEY)})
     .then(({error})=>{ if(error) console.warn('連續天數儲存失敗', error); });
   updateHomeStreakDisplay();
 }
@@ -97,20 +224,26 @@ function updateHomeStreakDisplay(){
 
 function incrementRaceWins(){
   raceWinCount++;
-  const updated = { character: STAT_RACE_WINS_KEY, best_reward:0, perfect_count:0, attempt_count: raceWinCount, updated_at: new Date().toISOString() };
-  progressMap[STAT_RACE_WINS_KEY] = updated;
-  sb.from('zhuyin_app_char_progress').upsert(updated)
+  const logical = { character: STAT_RACE_WINS_KEY, best_reward:0, perfect_count:0, attempt_count: raceWinCount, updated_at: new Date().toISOString() };
+  progressMap[STAT_RACE_WINS_KEY] = logical;
+  sb.from('zhuyin_app_char_progress').upsert({...logical, character: profileKey(STAT_RACE_WINS_KEY)})
     .then(({error})=>{ if(error) console.warn('賽車勝場儲存失敗', error); });
 }
 
 function saveCoins(){
-  sb.from('zhuyin_app_state').update({coins: coins, updated_at: new Date().toISOString()}).eq('id',1)
-    .then(({error})=>{ if(error) console.warn('金幣儲存失敗', error); });
+  if(activeProfileId === 1){
+    sb.from('zhuyin_app_state').update({coins: coins, updated_at: new Date().toISOString()}).eq('id',1)
+      .then(({error})=>{ if(error) console.warn('金幣儲存失敗', error); });
+  } else {
+    const dbRow = { character: profileKey(STAT_COINS_KEY), best_reward: coins, perfect_count:0, attempt_count:0, updated_at: new Date().toISOString() };
+    sb.from('zhuyin_app_char_progress').upsert(dbRow)
+      .then(({error})=>{ if(error) console.warn('金幣儲存失敗', error); });
+  }
 }
 
 function recordProgress(key, coinReward){
   const existing = progressMap[key] || {best_reward:0, perfect_count:0, attempt_count:0};
-  const updated = {
+  const logical = {
     character: key,
     best_reward: Math.max(existing.best_reward||0, coinReward),
     perfect_count: (existing.perfect_count||0) + (coinReward===3 ? 1 : 0),
@@ -118,8 +251,8 @@ function recordProgress(key, coinReward){
     last_reward: coinReward,
     updated_at: new Date().toISOString()
   };
-  progressMap[key] = updated;
-  sb.from('zhuyin_app_char_progress').upsert(updated)
+  progressMap[key] = logical;
+  sb.from('zhuyin_app_char_progress').upsert({...logical, character: profileKey(key)})
     .then(({error})=>{ if(error) console.warn('進度儲存失敗', error); });
   updateDailyStreak();
 }
@@ -388,7 +521,36 @@ function beginCharacterFlow(char){
   renderListenOptions();
   showScreen('screen-intro');
   setupIntroWriter();
+  renderComponentHint(char);
   speak(char);
+}
+
+// 部件識字：只有 componentData 裡有資料的字才會顯示這個提示區塊，
+// 象形字(大、小、山、水...)沒有硬拆，直接隱藏整塊不顯示。
+function renderComponentHint(char){
+  const wrap = document.getElementById('component-hint');
+  const row = document.getElementById('component-row');
+  const note = document.getElementById('component-note');
+  const data = componentData[char];
+  if(!data){
+    wrap.classList.remove('show');
+    return;
+  }
+  wrap.classList.add('show');
+  row.innerHTML = '';
+  data.parts.forEach((part, i)=>{
+    if(i > 0){
+      const plus = document.createElement('span');
+      plus.className = 'component-plus';
+      plus.textContent = '+';
+      row.appendChild(plus);
+    }
+    const tile = document.createElement('div');
+    tile.className = 'component-tile';
+    tile.textContent = part;
+    row.appendChild(tile);
+  });
+  note.textContent = data.hint || '';
 }
 
 const INTRO_W = 220, INTRO_H = 220, INTRO_PAD = 12;
@@ -1265,37 +1427,46 @@ function renderParentView(){
 }
 
 function resetCoins(){
-  if(!confirm('確定要把金幣歸零嗎？')) return;
+  if(!confirm(`確定要把「${currentProfileName()}」的金幣歸零嗎？`)) return;
   if(!confirm('再次確認：金幣歸零後沒辦法復原，確定要繼續嗎？')) return;
   coins = 0;
   syncCoinDisplay();
   saveCoins();
-  document.getElementById('parent-settings-msg').textContent = '金幣已經歸零了。';
+  document.getElementById('parent-settings-msg').textContent = `「${currentProfileName()}」的金幣已經歸零了。`;
 }
 
 function resetProgress(){
-  if(!confirm('確定要把所有練習紀錄跟成就進度都歸零嗎？')) return;
+  if(!confirm(`確定要把「${currentProfileName()}」的所有練習紀錄跟成就進度都歸零嗎？`)) return;
   if(!confirm('再次確認：這樣會清除所有已熟練的字、詞、注音、字母紀錄，還有賽車勝場、連續打卡天數，沒辦法復原，確定要繼續嗎？')) return;
   // 資料庫目前只開放 insert/select/update 的權限(沒有 delete)，所以用「把每一筆
-  // 都歸零」取代「刪除整張表」，效果一樣(歸零後跟沒練過沒兩樣)，也不用另外調整權限。
-  sb.from('zhuyin_app_char_progress')
-    .update({ best_reward:0, perfect_count:0, attempt_count:0, last_reward:0, updated_at:new Date().toISOString() })
-    .gte('attempt_count', 0)
+  // 都歸零」取代「刪除」。而且現在有多個檔案共用同一張表，不能再像以前一樣
+  // 用「篩選全部的列」來歸零(那樣會連其他小孩的紀錄都一起清空)，改成只針對
+  // 目前 progressMap 裡「這個檔案自己」的 key 一筆一筆歸零。
+  const keys = Object.keys(progressMap);
+  const finishReset = () => {
+    progressMap = {};
+    raceWinCount = 0;
+    currentStreak = 0;
+    bestStreak = 0;
+    lastPracticeDateStr = null;
+    renderCharSelectGrid();
+    updateHomeMascot();
+    updateHomeStreakDisplay();
+    document.getElementById('parent-settings-msg').textContent = `「${currentProfileName()}」的練習紀錄跟成就進度都已經歸零了。`;
+  };
+  if(keys.length === 0){ finishReset(); return; }
+  const rows = keys.map(k => ({
+    character: profileKey(k), best_reward:0, perfect_count:0, attempt_count:0, last_reward:0,
+    updated_at: new Date().toISOString()
+  }));
+  sb.from('zhuyin_app_char_progress').upsert(rows)
     .then(({error})=>{
       if(error){
         console.warn('進度歸零失敗', error);
         document.getElementById('parent-settings-msg').textContent = '歸零失敗，請稍後再試一次。';
         return;
       }
-      progressMap = {};
-      raceWinCount = 0;
-      currentStreak = 0;
-      bestStreak = 0;
-      lastPracticeDateStr = null;
-      renderCharSelectGrid();
-      updateHomeMascot();
-      updateHomeStreakDisplay();
-      document.getElementById('parent-settings-msg').textContent = '所有練習紀錄跟成就進度都已經歸零了。';
+      finishReset();
     });
 }
 
@@ -1695,4 +1866,5 @@ function finishBalloon(){
   setTimeout(()=> showScreen('screen-arcade'), 2000);
 }
 
+loadProfilesFromStorage();
 initFromSupabase();
