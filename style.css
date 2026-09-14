@@ -328,6 +328,35 @@
     padding:4px 10px;margin-top:6px;
   }
 
+  .fish-char{
+    font-size:48px;font-weight:900;color:var(--ink);text-align:center;margin:4px 0 0;
+  }
+  .fish-scene{
+    display:flex;align-items:flex-end;justify-content:center;gap:8px;margin:10px 0;
+  }
+  .fish-monster{ text-align:center;flex-shrink:0; }
+  .fish-monster-svg{ width:52px;height:52px;display:block; }
+  .fish-monster-label{ font-size:12px;font-weight:700;color:var(--ink);margin-top:2px; }
+  .fish-pond{
+    flex:1;min-height:150px;background:#BFE3FF;border:3px solid var(--ink);border-radius:18px;
+    display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px;padding:14px;
+  }
+  .fish-item{ cursor:pointer;text-align:center;user-select:none;animation:fish-bob 1.6s ease-in-out infinite; }
+  .fish-item:nth-child(2){ animation-delay:.3s; }
+  .fish-item:nth-child(3){ animation-delay:.6s; }
+  .fish-item:nth-child(4){ animation-delay:.9s; }
+  @keyframes fish-bob{
+    0%,100%{ transform:translateY(0); }
+    50%{ transform:translateY(-6px); }
+  }
+  .fish-emoji{ font-size:34px; }
+  .fish-label{
+    background:white;border:3px solid var(--ink);border-radius:10px;
+    padding:2px 8px;font-size:15px;font-weight:900;color:var(--ink);margin-top:2px;
+  }
+  .fish-label.correct{ background:var(--green);color:white;border-color:var(--green-dark); }
+  .fish-label.wrong{ background:#FFC9C9;border-color:#D9534F;animation:shake .3s; }
+
   .parent-link{
     background:none;border:none;color:#8792a6;font-size:12px;
     margin-top:14px;cursor:pointer;text-decoration:underline;
