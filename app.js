@@ -301,6 +301,25 @@ function speak(text, lang){
   speechSynthesis.speak(u);
 }
 
+// 依序唸出一連串文字，中間不會互相打斷(speak() 每次呼叫都會 cancel
+// 前一句，如果只是快速連續呼叫 speak() 沒辦法排成一串完整唸完，所以
+// 這裡改成等上一句的 onend 觸發後才接著唸下一句)。
+function speakSequence(texts, lang){
+  if(!('speechSynthesis' in window) || !texts.length) return;
+  speechSynthesis.cancel();
+  let i = 0;
+  function playNext(){
+    if(i >= texts.length) return;
+    const u = new SpeechSynthesisUtterance(texts[i]);
+    u.lang = lang || 'zh-TW';
+    u.rate = 0.6;
+    i++;
+    if(i < texts.length) u.onend = playNext;
+    speechSynthesis.speak(u);
+  }
+  playNext();
+}
+
 // ---- 共用：音效與背景音樂 ----
 let _audioCtx = null;
 function getAudioCtx(){
@@ -707,24 +726,34 @@ function startZhuyinPractice(){
   showScreen('screen-zhuyin-intro');
   speakZhuyinExample();
 }
-function speakZhuyinExample(){ speak(zhuyinData[currentZhuyinIndex].example); }
+// 先唸三次注音符號本身，再唸例字的完整詞語(例如「ㄅㄅㄅ，爸爸」)，
+// 這樣小朋友可以先聽到符號的發音，再聽到它在真實詞語裡的樣子。
+function speakZhuyinExample(){
+  const entry = zhuyinData[currentZhuyinIndex];
+  speakSequence([entry.symbol, entry.symbol, entry.symbol, entry.example]);
+}
 
 let zCanvas, zCtx, zDrawing=false;
 let zhuyinGlyphPoints = [];
 let zhuyinUserPoints = [];
 let zGuideAlpha = 0.18;
+let zhuyinAutoFinishTimer = null;
+let zhuyinStrokeCount = 0;
 
 function setupZhuyinWrite(){
   zCanvas = document.getElementById('zhuyin-canvas');
   zCtx = zCanvas.getContext('2d');
   zGuideAlpha = 0.18;
   zhuyinUserPoints = [];
+  zhuyinStrokeCount = 0;
+  clearTimeout(zhuyinAutoFinishTimer);
   document.getElementById('zhuyin-write-msg').textContent = '';
   buildZhuyinGlyphMask();
   drawZhuyinGuide();
 
   zCanvas.onpointerdown = e => {
     e.preventDefault();
+    clearTimeout(zhuyinAutoFinishTimer);
     zCanvas.setPointerCapture(e.pointerId);
     zDrawing = true;
     const p = zPos(e);
@@ -744,7 +773,14 @@ function setupZhuyinWrite(){
     zCtx.lineJoin = 'round';
     zCtx.stroke();
   };
-  zCanvas.onpointerup = e => { e.preventDefault(); zDrawing=false; };
+  zCanvas.onpointerup = e => {
+    e.preventDefault();
+    zDrawing=false;
+    playStrokeSound(zhuyinStrokeCount);
+    zhuyinStrokeCount++;
+    clearTimeout(zhuyinAutoFinishTimer);
+    zhuyinAutoFinishTimer = setTimeout(checkZhuyinAutoFinish, 900);
+  };
   zCanvas.onpointercancel = e => { e.preventDefault(); zDrawing=false; };
   zCanvas.ontouchstart = e => e.preventDefault();
   zCanvas.ontouchmove = e => e.preventDefault();
@@ -789,24 +825,23 @@ function drawZhuyinGuide(){
 }
 
 function clearZhuyinCanvas(){
+  clearTimeout(zhuyinAutoFinishTimer);
   zGuideAlpha = 0.18;
   zhuyinUserPoints = [];
+  zhuyinStrokeCount = 0;
   drawZhuyinGuide();
   document.getElementById('zhuyin-write-msg').textContent = '';
 }
 
 function hintZhuyin(){
+  clearTimeout(zhuyinAutoFinishTimer);
   zGuideAlpha = 0.4;
   zhuyinUserPoints = [];
   drawZhuyinGuide();
   document.getElementById('zhuyin-write-msg').textContent = '提示：照著明顯一點的符號描寫看看！';
 }
 
-function finishZhuyinWriting(){
-  if(zhuyinUserPoints.length < 10){
-    alert('請先照著淡淡的注音符號描一次喔！');
-    return;
-  }
+function computeZhuyinScore(){
   const tol = 16 * (zCanvas.width/260);
   let coveredCount = 0;
   for(const gp of zhuyinGlyphPoints){
@@ -828,7 +863,27 @@ function finishZhuyinWriting(){
   }
   const accuracy = zhuyinUserPoints.length ? accCount/zhuyinUserPoints.length : 0;
 
-  const score = coverage*0.6 + accuracy*0.4;
+  return { coverage, accuracy, score: coverage*0.6 + accuracy*0.4 };
+}
+
+// 寫完停筆一小段時間後自動完成，不用特別按「我寫好了」(注音符號沒有
+// 公認的筆順資料，所以不像英文字母那樣額外檢查「抬筆次數」，只看有沒有
+// 描到夠多形狀就好，跟原本 finishZhuyinWriting() 判斷及不及格的門檻一致)。
+function checkZhuyinAutoFinish(){
+  if(zhuyinUserPoints.length < 10) return;
+  const { coverage } = computeZhuyinScore();
+  if(coverage >= 0.4){
+    finishZhuyinWriting();
+  }
+}
+
+function finishZhuyinWriting(){
+  clearTimeout(zhuyinAutoFinishTimer);
+  if(zhuyinUserPoints.length < 10){
+    alert('請先照著淡淡的注音符號描一次喔！');
+    return;
+  }
+  const { score } = computeZhuyinScore();
   let coinReward;
   if(score >= 0.55) coinReward = 3;
   else if(score >= 0.3) coinReward = 2;
@@ -1127,6 +1182,7 @@ function setupLetterWrite(){
   letterCanvas.onpointerup = e => {
     e.preventDefault();
     letterDrawing = false;
+    playStrokeSound(letterStrokeAttempts);
     letterStrokeAttempts++;
     clearTimeout(letterAutoFinishTimer);
     letterAutoFinishTimer = setTimeout(checkLetterAutoFinish, 900);
