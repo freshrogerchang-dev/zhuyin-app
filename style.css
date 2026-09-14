@@ -300,6 +300,29 @@
     to{ transform:translateY(-3px); }
   }
 
+  #mp-race-sign-left{left:25%;}
+  #mp-race-sign-right{left:75%;}
+  #mp-race-car-player{left:25%;z-index:3;}
+  #mp-race-car-opponent{left:50%;opacity:.85;}
+  #mp-race-car-opponent .race-car-svg{ width:22px; }
+  #mp-race-car-player .race-car-body{ fill:var(--race-player-color, var(--coral)); }
+  #mp-race-car-opponent .race-car-body{ fill:var(--green); }
+
+  .mp-code-input{
+    width:100%;box-sizing:border-box;margin-top:10px;padding:14px;
+    font-size:32px;font-weight:900;letter-spacing:10px;text-align:center;
+    color:var(--ink);border:3px solid var(--ink);border-radius:14px;background:white;
+  }
+  .mp-waiting{text-align:center;}
+  .mp-code-display{
+    font-size:48px;font-weight:900;letter-spacing:10px;color:var(--ink);
+    background:white;border:4px solid var(--ink);border-radius:16px;
+    padding:12px 0;margin:10px 0;
+  }
+  .mp-countdown-num{
+    font-size:72px;font-weight:900;color:var(--coral);margin:14px 0;
+  }
+
   .parent-link{
     background:none;border:none;color:#8792a6;font-size:12px;
     margin-top:14px;cursor:pointer;text-decoration:underline;

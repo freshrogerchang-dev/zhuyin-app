@@ -291,7 +291,7 @@
         <div class="game-card">
           <div class="emoji">🏎️</div>
           <div class="info"><b>注音賽車</b><span>花 5 🪙 玩一次</span></div>
-          <button onclick="playGame('race',5)">玩</button>
+          <button onclick="showScreen('screen-race-mode')">玩</button>
         </div>
         <div class="game-card">
           <div class="emoji">🎈</div>
@@ -398,6 +398,107 @@
         <div class="race-hitzone race-hitzone-right" id="race-hitzone-right"></div>
       </div>
       <div class="msg" id="race-msg"></div>
+    </div>
+  </div>
+
+  <!-- 注音賽車：選對手模式 -->
+  <div class="screen" id="screen-race-mode">
+    <div class="topbar">
+      <button class="back-btn" onclick="showScreen('screen-arcade')">← 返回</button>
+      <div class="coin-badge"><span class="icon">🪙</span><span class="coin-count">8</span></div>
+    </div>
+    <div class="card">
+      <h2>注音賽車</h2>
+      <p class="sub" style="margin-bottom:0;">要跟誰比賽呢？</p>
+      <div class="game-list">
+        <div class="game-card">
+          <div class="emoji">🤖</div>
+          <div class="info"><b>跟電腦對手</b><span>花 5 🪙 玩一次</span></div>
+          <button onclick="playGame('race',5)">玩</button>
+        </div>
+        <div class="game-card">
+          <div class="emoji">👦👧</div>
+          <div class="info"><b>跟朋友對戰</b><span>花 5 🪙 玩一次</span></div>
+          <button onclick="openMultiRaceLobby()">玩</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 注音賽車：跟朋友對戰的房間 -->
+  <div class="screen" id="screen-race-multi-lobby">
+    <div class="topbar">
+      <button class="back-btn" onclick="leaveMultiRaceLobby()">← 返回</button>
+      <div class="coin-badge"><span class="icon">🪙</span><span class="coin-count">8</span></div>
+    </div>
+    <div class="card">
+      <h2>跟朋友對戰</h2>
+      <div id="mp-lobby-choose">
+        <p class="sub" style="margin-bottom:0;">花 5 🪙，選一個方式開始</p>
+        <button class="btn-primary" style="width:100%;margin-top:14px;" onclick="hostMultiRace()">建立房間，當主機</button>
+        <p class="sub" style="margin-top:20px;margin-bottom:0;">或是輸入朋友給你的邀請碼</p>
+        <input type="text" id="mp-join-code" class="mp-code-input" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="0000" oninput="this.value=this.value.replace(/\D/g,'').slice(0,4)">
+        <button class="btn-secondary" style="width:100%;margin-top:10px;" onclick="joinMultiRace()">加入房間</button>
+      </div>
+      <div id="mp-lobby-waiting" class="mp-waiting" style="display:none;">
+        <p class="sub" style="margin-bottom:0;">把這組邀請碼告訴朋友：</p>
+        <div class="mp-code-display" id="mp-code-display">0000</div>
+        <p class="sub" id="mp-wait-msg">等待朋友加入中...🕐</p>
+        <button class="btn-secondary" style="width:100%;margin-top:6px;" onclick="cancelMultiRace()">取消，退還金幣</button>
+      </div>
+      <div id="mp-lobby-countdown" class="mp-waiting" style="display:none;">
+        <p class="sub" style="margin-bottom:0;">朋友加入了！準備出發</p>
+        <div class="mp-countdown-num" id="mp-countdown-num">3</div>
+      </div>
+      <div class="msg" id="mp-lobby-msg"></div>
+    </div>
+  </div>
+
+  <!-- 注音賽車：跟朋友對戰的賽道 -->
+  <div class="screen" id="screen-race-multi">
+    <div class="topbar">
+      <button class="back-btn" onclick="leaveMultiRaceMatch()">← 返回</button>
+      <div class="coin-badge"><span class="icon">🪙</span><span class="coin-count">8</span></div>
+    </div>
+    <div class="card">
+      <h2>跟朋友對戰</h2>
+      <p class="sub" style="margin-bottom:0;">選對衝刺，答錯慢慢開，看誰先到終點！</p>
+      <div class="race-qnum-badge">第 <span id="mp-race-qnum">1</span> / 9 題</div>
+      <div class="race-char" id="mp-race-char"></div>
+      <p class="race-key-hint">點賽道的左邊或右邊，或用鍵盤 ← → 方向鍵，把車開去正確答案那一邊</p>
+      <div class="race-track">
+        <span class="race-flag">🏁</span>
+        <div class="race-lane-line"></div>
+        <div class="race-answer-sign" id="mp-race-sign-left"></div>
+        <div class="race-answer-sign" id="mp-race-sign-right"></div>
+        <div class="race-car" id="mp-race-car-opponent">
+          <svg class="race-car-svg" viewBox="0 0 40 60" xmlns="http://www.w3.org/2000/svg">
+            <rect class="race-car-body" x="7" y="2" width="26" height="56" rx="10" stroke="#1F2A44" stroke-width="3"/>
+            <rect x="12" y="14" width="16" height="16" rx="4" fill="#BFE3FF" stroke="#1F2A44" stroke-width="2"/>
+            <circle cx="12" cy="9" r="3" fill="#FFE18A" stroke="#1F2A44" stroke-width="1.5"/>
+            <circle cx="28" cy="9" r="3" fill="#FFE18A" stroke="#1F2A44" stroke-width="1.5"/>
+            <rect x="0" y="10" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="33" y="10" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="0" y="36" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="33" y="36" width="7" height="14" rx="2" fill="#1F2A44"/>
+          </svg>
+        </div>
+        <div class="race-car" id="mp-race-car-player">
+          <svg class="race-car-svg" viewBox="0 0 40 60" xmlns="http://www.w3.org/2000/svg">
+            <rect class="race-car-body" x="7" y="2" width="26" height="56" rx="10" stroke="#1F2A44" stroke-width="3"/>
+            <rect x="12" y="14" width="16" height="16" rx="4" fill="#BFE3FF" stroke="#1F2A44" stroke-width="2"/>
+            <circle cx="12" cy="9" r="3" fill="#FFE18A" stroke="#1F2A44" stroke-width="1.5"/>
+            <circle cx="28" cy="9" r="3" fill="#FFE18A" stroke="#1F2A44" stroke-width="1.5"/>
+            <rect x="0" y="10" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="33" y="10" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="0" y="36" width="7" height="14" rx="2" fill="#1F2A44"/>
+            <rect x="33" y="36" width="7" height="14" rx="2" fill="#1F2A44"/>
+          </svg>
+        </div>
+        <div class="race-hitzone race-hitzone-left" id="mp-race-hitzone-left"></div>
+        <div class="race-hitzone race-hitzone-right" id="mp-race-hitzone-right"></div>
+      </div>
+      <div class="msg" id="mp-race-msg"></div>
     </div>
   </div>
 
