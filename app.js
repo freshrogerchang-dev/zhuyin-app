@@ -1471,15 +1471,16 @@ function resetProgress(){
 }
 
 // ---- 遊戲大廳 ----
-function playGame(game, cost){
+function playGame(game, cost, msgElId){
+  msgElId = msgElId || 'arcade-msg';
   if(coins < cost){
-    document.getElementById('arcade-msg').textContent = '金幣不夠喔，回去多練幾個字吧！';
+    document.getElementById(msgElId).textContent = '金幣不夠喔，回去多練幾個字吧！';
     return;
   }
   coins -= cost;
   syncCoinDisplay();
   saveCoins();
-  document.getElementById('arcade-msg').textContent = '';
+  document.getElementById(msgElId).textContent = '';
   if(game==='mole'){ showScreen('screen-mole'); startMole(); }
   else if(game==='memory'){ showScreen('screen-memory'); startMemory(); }
   else if(game==='match'){ showScreen('screen-match'); startMatch(); }
@@ -1533,8 +1534,12 @@ function startMole(){
       clearInterval(moleTimer);
       clearInterval(moleActive);
       document.querySelectorAll('.hole').forEach(h=>{h.classList.remove('up');h.textContent='';});
-      document.getElementById('mole-msg').textContent = `時間到！最終分數：${moleScore} 分 🎉`;
-      setTimeout(()=> showScreen('screen-arcade'), 2000);
+      if(duelActive && duelGameKey==='mole'){
+        reportDuelFinish(moleScore);
+      } else {
+        document.getElementById('mole-msg').textContent = `時間到！最終分數：${moleScore} 分 🎉`;
+        setTimeout(()=> showScreen('screen-arcade'), 2000);
+      }
     }
   },1000);
 }
@@ -1543,6 +1548,7 @@ function hitMole(i){
     playMoleHitSound();
     moleScore++;
     document.getElementById('mole-score').textContent = moleScore;
+    if(duelActive && duelGameKey==='mole') reportDuelProgress(moleScore);
     const h = document.querySelector(`.hole[data-index='${i}']`);
     h.classList.remove('up');
     h.textContent = '';
@@ -1590,6 +1596,7 @@ function flipMemoryCard(id){
     memoryLock = true;
     memoryMoves++;
     document.getElementById('memory-moves').textContent = memoryMoves;
+    if(duelActive && duelGameKey==='memory') reportDuelProgress(memoryMoves);
     const [a,b] = memoryFlipped;
     if(a.symbol===b.symbol){
       playMatchFoundSound();
@@ -1599,8 +1606,12 @@ function flipMemoryCard(id){
       memoryLock = false;
       renderMemoryGrid();
       if(memoryMatchedCount===memoryCards.length){
-        document.getElementById('memory-msg').textContent = `太棒了！用 ${memoryMoves} 次翻牌全部配對成功 🎉`;
-        setTimeout(()=> showScreen('screen-arcade'), 2000);
+        if(duelActive && duelGameKey==='memory'){
+          reportDuelFinish(memoryMoves);
+        } else {
+          document.getElementById('memory-msg').textContent = `太棒了！用 ${memoryMoves} 次翻牌全部配對成功 🎉`;
+          setTimeout(()=> showScreen('screen-arcade'), 2000);
+        }
       }
     } else {
       playMismatchSound();
@@ -1615,7 +1626,7 @@ function flipMemoryCard(id){
 }
 
 // ---- 字音配對 ----
-let matchPairs = [], matchZhuyinOrder = [], matchSelectedChar = null, matchSelectedZhuyin = null, matchSolvedCount = 0;
+let matchPairs = [], matchZhuyinOrder = [], matchSelectedChar = null, matchSelectedZhuyin = null, matchSolvedCount = 0, matchStartTime = 0;
 
 function startMatch(){
   const chosenChars = shuffleArray(Object.keys(charData).slice()).slice(0,5);
@@ -1624,6 +1635,7 @@ function startMatch(){
   matchSelectedChar = null;
   matchSelectedZhuyin = null;
   matchSolvedCount = 0;
+  matchStartTime = Date.now();
   document.getElementById('match-msg').textContent = '';
   renderMatchColumns();
 }
@@ -1660,8 +1672,12 @@ function tryMatchResolve(){
     matchSelectedZhuyin = null;
     renderMatchColumns();
     if(matchSolvedCount===matchPairs.length){
-      document.getElementById('match-msg').textContent = '全部配對成功，太厲害了！🎉';
-      setTimeout(()=> showScreen('screen-arcade'), 2000);
+      if(duelActive && duelGameKey==='match'){
+        reportDuelFinish(Math.round((Date.now()-matchStartTime)/1000));
+      } else {
+        document.getElementById('match-msg').textContent = '全部配對成功，太厲害了！🎉';
+        setTimeout(()=> showScreen('screen-arcade'), 2000);
+      }
     }
   } else {
     document.getElementById('match-msg').textContent = '再試試看，配對不對喔';
@@ -2002,6 +2018,229 @@ function leaveMultiRaceMatch(){
   showScreen('screen-arcade');
 }
 
+// ---- 打地鼠 / 翻牌配對 / 字音配對 / 打氣球共用的「跟朋友比賽」系統 ----
+// 跟賽車對戰用同一套邀請碼 + Supabase Realtime 廣播頻道機制，但這幾個
+// 遊戲本來就是「各自在自己畫面玩」，不需要像賽車一樣畫在同一個賽道上，
+// 所以做法簡化成：兩邊各自玩一輪原本的單人遊戲，玩的時候用小徽章顯示
+// 對方目前的成績，兩邊都玩完才比賽果(打地鼠/打氣球比分數高，翻牌配對
+// 比翻牌次數少，字音配對比花的秒數少)。
+const DUEL_GAMES = {
+  mole:    { title:'打地鼠',   emoji:'🔨', screen:'screen-mole',    msgEl:'mole-msg',    lowerWins:false, unit:'分' },
+  memory:  { title:'翻牌配對', emoji:'🃏', screen:'screen-memory',  msgEl:'memory-msg',  lowerWins:true,  unit:'次' },
+  match:   { title:'字音配對', emoji:'🔗', screen:'screen-match',   msgEl:'match-msg',   lowerWins:true,  unit:'秒' },
+  balloon: { title:'打氣球',   emoji:'🎈', screen:'screen-balloon', msgEl:'balloon-msg', lowerWins:false, unit:'分' },
+};
+let duelPendingGame = null, duelPendingCost = 0;
+let duelGameKey = null, duelCost = 0;
+let duelChannel = null, duelRoomCode = null, duelWaitTimeout = null;
+let duelActive = false, duelResultShown = false, duelSelfDone = false, duelOpponentDone = false;
+let duelSelfMetric = 0, duelOpponentMetric = 0;
+
+function openDuelMode(gameKey, cost){
+  duelPendingGame = gameKey;
+  duelPendingCost = cost;
+  const info = DUEL_GAMES[gameKey];
+  document.getElementById('duel-mode-title').textContent = info.title;
+  document.getElementById('duel-mode-emoji').textContent = info.emoji;
+  document.getElementById('duel-mode-cost-solo').textContent = `花 ${cost} 🪙 玩一次`;
+  document.getElementById('duel-mode-cost-duel').textContent = `花 ${cost} 🪙 玩一次`;
+  document.getElementById('duel-mode-msg').textContent = '';
+  showScreen('screen-duel-mode');
+}
+function startSoloFromDuelMode(){
+  playGame(duelPendingGame, duelPendingCost, 'duel-mode-msg');
+}
+function openDuelLobby(){
+  duelGameKey = duelPendingGame;
+  duelCost = duelPendingCost;
+  const info = DUEL_GAMES[duelGameKey];
+  document.getElementById('duel-lobby-title').textContent = '跟朋友比賽：' + info.title;
+  document.getElementById('duel-lobby-cost-msg').textContent = `花 ${duelCost} 🪙，選一個方式開始`;
+  document.getElementById('duel-lobby-choose').style.display = '';
+  document.getElementById('duel-lobby-waiting').style.display = 'none';
+  document.getElementById('duel-lobby-countdown').style.display = 'none';
+  document.getElementById('duel-join-code').value = '';
+  document.getElementById('duel-lobby-msg').textContent = '';
+  showScreen('screen-duel-lobby');
+}
+function randomDuelCode(){
+  return String(Math.floor(1000 + Math.random()*9000));
+}
+function connectDuelChannel(code, { onJoin, onSubscribed } = {}){
+  if(duelChannel){ sb.removeChannel(duelChannel); duelChannel = null; }
+  duelOpponentMetric = 0;
+  duelChannel = sb.channel('zhuyin_duel_' + duelGameKey + '_' + code, { config: { broadcast: { self:false } } });
+  if(onJoin) duelChannel.on('broadcast', {event:'join'}, onJoin);
+  duelChannel.on('broadcast', {event:'start'}, ({payload}) => startDuelCountdown(payload && payload.goAt));
+  duelChannel.on('broadcast', {event:'progress'}, ({payload}) => receiveDuelOpponentProgress(payload));
+  duelChannel.on('broadcast', {event:'finish'}, ({payload}) => receiveDuelOpponentFinish(payload));
+  duelChannel.on('broadcast', {event:'leave'}, () => handleDuelOpponentLeave());
+  duelChannel.subscribe(status => { if(status === 'SUBSCRIBED' && onSubscribed) onSubscribed(); });
+}
+function hostDuel(){
+  if(coins < duelCost){
+    document.getElementById('duel-lobby-msg').textContent = '金幣不夠喔，回去多練幾個字吧！';
+    return;
+  }
+  coins -= duelCost; syncCoinDisplay(); saveCoins();
+  duelRoomCode = randomDuelCode();
+  document.getElementById('duel-code-display').textContent = duelRoomCode;
+  document.getElementById('duel-wait-msg').textContent = '等待朋友加入中...🕐';
+  document.getElementById('duel-lobby-choose').style.display = 'none';
+  document.getElementById('duel-lobby-waiting').style.display = '';
+  connectDuelChannel(duelRoomCode, {
+    onJoin(){
+      const goAt = Date.now() + 3000;
+      duelChannel.send({type:'broadcast', event:'start', payload:{goAt}});
+      startDuelCountdown(goAt);
+    }
+  });
+}
+function joinDuel(){
+  const code = document.getElementById('duel-join-code').value.trim();
+  if(!/^\d{4}$/.test(code)){
+    document.getElementById('duel-lobby-msg').textContent = '請輸入朋友給你的 4 位數邀請碼';
+    return;
+  }
+  if(coins < duelCost){
+    document.getElementById('duel-lobby-msg').textContent = '金幣不夠喔，回去多練幾個字吧！';
+    return;
+  }
+  coins -= duelCost; syncCoinDisplay(); saveCoins();
+  duelRoomCode = code;
+  document.getElementById('duel-lobby-msg').textContent = '';
+  document.getElementById('duel-wait-msg').textContent = '正在連線到朋友的房間...🕐';
+  document.getElementById('duel-lobby-choose').style.display = 'none';
+  document.getElementById('duel-lobby-waiting').style.display = '';
+  connectDuelChannel(duelRoomCode, {
+    onSubscribed(){
+      duelChannel.send({type:'broadcast', event:'join', payload:{}});
+      duelWaitTimeout = setTimeout(()=>{
+        document.getElementById('duel-wait-msg').textContent = '找不到朋友的房間，請確認邀請碼，或請朋友重新建立房間';
+      }, MP_JOIN_TIMEOUT_MS);
+    }
+  });
+}
+function cancelDuel(){
+  coins += duelCost; syncCoinDisplay(); saveCoins();
+  leaveDuelLobby();
+}
+function leaveDuelLobby(){
+  if(duelChannel) duelChannel.send({type:'broadcast', event:'leave', payload:{}});
+  cleanupDuelChannel();
+  showScreen('screen-duel-mode');
+}
+function cleanupDuelChannel(){
+  if(duelWaitTimeout){ clearTimeout(duelWaitTimeout); duelWaitTimeout = null; }
+  if(duelChannel){ sb.removeChannel(duelChannel); duelChannel = null; }
+}
+function handleDuelOpponentLeave(){
+  if(document.getElementById('screen-duel-lobby').classList.contains('active')){
+    document.getElementById('duel-wait-msg').textContent = '朋友離開了，請重新開始';
+  } else if(duelActive){
+    duelActive = false;
+    hideDuelBadge();
+    const msgEl = document.getElementById(DUEL_GAMES[duelGameKey].msgEl);
+    if(msgEl) msgEl.textContent = '朋友離開了比賽 😢';
+    setTimeout(()=>{ cleanupDuelChannel(); showScreen('screen-arcade'); }, 2000);
+  }
+}
+function startDuelCountdown(goAt){
+  if(!goAt) return;
+  if(duelWaitTimeout){ clearTimeout(duelWaitTimeout); duelWaitTimeout = null; }
+  document.getElementById('duel-lobby-waiting').style.display = 'none';
+  document.getElementById('duel-lobby-countdown').style.display = '';
+  const numEl = document.getElementById('duel-countdown-num');
+  (function tick(){
+    const remain = Math.ceil((goAt - Date.now()) / 1000);
+    if(remain <= 0){
+      beginDuelPlay();
+      return;
+    }
+    numEl.textContent = remain;
+    setTimeout(tick, 200);
+  })();
+}
+function beginDuelPlay(){
+  duelActive = true;
+  duelResultShown = false;
+  duelSelfDone = false;
+  duelOpponentDone = false;
+  duelSelfMetric = 0;
+  duelOpponentMetric = 0;
+  const info = DUEL_GAMES[duelGameKey];
+  showScreen(info.screen);
+  showDuelBadge();
+  updateDuelBadge();
+  if(duelGameKey === 'mole') startMole();
+  else if(duelGameKey === 'memory') startMemory();
+  else if(duelGameKey === 'match') startMatch();
+  else if(duelGameKey === 'balloon') startBalloon();
+}
+function showDuelBadge(){
+  const el = document.getElementById(duelGameKey + '-duel-badge');
+  if(el) el.style.display = '';
+}
+function hideDuelBadge(){
+  Object.keys(DUEL_GAMES).forEach(k=>{
+    const el = document.getElementById(k + '-duel-badge');
+    if(el) el.style.display = 'none';
+  });
+}
+function updateDuelBadge(){
+  const info = DUEL_GAMES[duelGameKey];
+  const el = document.getElementById(duelGameKey + '-duel-text');
+  if(el) el.textContent = '對手：' + (duelOpponentDone || duelOpponentMetric ? duelOpponentMetric + info.unit : '-');
+}
+function reportDuelProgress(metric){
+  if(!duelActive) return;
+  if(duelChannel) duelChannel.send({type:'broadcast', event:'progress', payload:{metric}});
+}
+function receiveDuelOpponentProgress(payload){
+  if(!payload) return;
+  duelOpponentMetric = payload.metric;
+  updateDuelBadge();
+}
+function reportDuelFinish(metric){
+  if(duelSelfDone) return;
+  duelSelfDone = true;
+  duelSelfMetric = metric;
+  duelActive = false;
+  if(duelChannel) duelChannel.send({type:'broadcast', event:'finish', payload:{metric}});
+  maybeRenderDuelResult();
+}
+function receiveDuelOpponentFinish(payload){
+  if(!payload) return;
+  duelOpponentDone = true;
+  duelOpponentMetric = payload.metric;
+  updateDuelBadge();
+  maybeRenderDuelResult();
+}
+function maybeRenderDuelResult(){
+  if(duelResultShown || !duelSelfDone || !duelOpponentDone) return;
+  duelResultShown = true;
+  const info = DUEL_GAMES[duelGameKey];
+  const tie = duelSelfMetric === duelOpponentMetric;
+  const iWin = info.lowerWins ? duelSelfMetric < duelOpponentMetric : duelSelfMetric > duelOpponentMetric;
+  let msg;
+  if(tie) msg = `你們打成平手！都是 ${duelSelfMetric}${info.unit}，太厲害了 🤝`;
+  else if(iWin) msg = `跟朋友比賽，你贏了！你 ${duelSelfMetric}${info.unit}，朋友 ${duelOpponentMetric}${info.unit} 🏆`;
+  else msg = `朋友比較厲害，你 ${duelSelfMetric}${info.unit}，朋友 ${duelOpponentMetric}${info.unit}，再挑戰一次吧！`;
+  const msgEl = document.getElementById(info.msgEl);
+  if(msgEl) msgEl.textContent = msg;
+  hideDuelBadge();
+  setTimeout(()=>{ cleanupDuelChannel(); showScreen('screen-arcade'); }, 2500);
+}
+function leaveDuelMatch(){
+  if(duelActive){
+    duelActive = false;
+    if(duelChannel) duelChannel.send({type:'broadcast', event:'leave', payload:{}});
+  }
+  hideDuelBadge();
+  cleanupDuelChannel();
+  showScreen('screen-arcade');
+}
+
 // ---- 打氣球 ----
 // 每回合聽發音、看國字，畫面下方浮出幾顆氣球，各自寫著一個候選注音，
 // 要在氣球飄出畫面之前戳破寫著正確答案的那一顆。戳到錯的只是消失，
@@ -2085,6 +2324,7 @@ function popBalloon(balloon, isCorrect){
     playBalloonPopSound();
     balloonScore++;
     document.getElementById('balloon-score').textContent = balloonScore;
+    if(duelActive && duelGameKey==='balloon') reportDuelProgress(balloonScore);
     balloonRoundActive = false;
     setTimeout(()=> balloon.remove(), 250);
     setTimeout(()=> nextBalloonRound(), 700);
@@ -2096,8 +2336,12 @@ function popBalloon(balloon, isCorrect){
 
 function finishBalloon(){
   document.getElementById('balloon-sky').innerHTML = '';
-  document.getElementById('balloon-msg').textContent = `打氣球結束！戳對了 ${balloonScore} / ${BALLOON_ROUND_COUNT} 個 🎈`;
-  setTimeout(()=> showScreen('screen-arcade'), 2000);
+  if(duelActive && duelGameKey==='balloon'){
+    reportDuelFinish(balloonScore);
+  } else {
+    document.getElementById('balloon-msg').textContent = `打氣球結束！戳對了 ${balloonScore} / ${BALLOON_ROUND_COUNT} 個 🎈`;
+    setTimeout(()=> showScreen('screen-arcade'), 2000);
+  }
 }
 
 loadProfilesFromStorage();
