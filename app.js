@@ -283,7 +283,7 @@ function pickWeightedFrom(keys){
   return weighted[Math.floor(Math.random()*weighted.length)];
 }
 
-const GAME_SCREEN_MUSIC = { 'screen-mole': 'mole', 'screen-memory': 'memory', 'screen-match': 'match', 'screen-race': 'race', 'screen-balloon': 'balloon' };
+const GAME_SCREEN_MUSIC = { 'screen-mole': 'mole', 'screen-memory': 'memory', 'screen-match': 'match', 'screen-race': 'race', 'screen-race-multi': 'race', 'screen-balloon': 'balloon' };
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -1766,6 +1766,240 @@ function finishRace(){
   }
   document.getElementById('race-msg').textContent = msg;
   setTimeout(()=> showScreen('screen-arcade'), 2000);
+}
+
+// ---- 注音賽車：跟朋友對戰 ----
+// 玩法跟單人版一樣(答對衝刺、答錯慢慢開)，差別是「對手」換成真的朋友，
+// 用 Supabase Realtime 的 broadcast 頻道即時同步兩邊的進度，不需要額外的資料表。
+// 房間用一組 4 位數邀請碼當頻道名稱：主機先建立房間等待，朋友輸入邀請碼加入後，
+// 主機收到 join 就用同一個起跑時間(goAt)廣播 start，兩邊各自倒數、同時開始比賽。
+const MP_RACE_COST = 5;
+const MP_JOIN_TIMEOUT_MS = 15000;
+let mpChannel = null, mpRoomCode = null, mpWaitTimeout = null;
+let mpQuestionIndex = 0, mpProgress = 0, mpOpponentProgress = 0;
+let mpActive = false, mpLocked = false, mpResultShown = false;
+let mpCurrentChar = null, mpCorrectSide = null;
+
+function openMultiRaceLobby(){
+  document.getElementById('mp-lobby-choose').style.display = '';
+  document.getElementById('mp-lobby-waiting').style.display = 'none';
+  document.getElementById('mp-lobby-countdown').style.display = 'none';
+  document.getElementById('mp-join-code').value = '';
+  document.getElementById('mp-lobby-msg').textContent = '';
+  showScreen('screen-race-multi-lobby');
+}
+function randomRoomCode(){
+  return String(Math.floor(1000 + Math.random()*9000));
+}
+function connectMultiChannel(code, { onJoin, onSubscribed } = {}){
+  if(mpChannel){ sb.removeChannel(mpChannel); mpChannel = null; }
+  mpOpponentProgress = 0;
+  mpChannel = sb.channel('zhuyin_race_' + code, { config: { broadcast: { self:false } } });
+  if(onJoin) mpChannel.on('broadcast', {event:'join'}, onJoin);
+  mpChannel.on('broadcast', {event:'start'}, ({payload}) => startMultiCountdown(payload && payload.goAt));
+  mpChannel.on('broadcast', {event:'progress'}, ({payload}) => receiveMpOpponentProgress(payload));
+  mpChannel.on('broadcast', {event:'finish'}, ({payload}) => receiveMpOpponentFinish(payload));
+  mpChannel.on('broadcast', {event:'leave'}, () => handleMpOpponentLeave());
+  mpChannel.subscribe(status => { if(status === 'SUBSCRIBED' && onSubscribed) onSubscribed(); });
+}
+function hostMultiRace(){
+  if(coins < MP_RACE_COST){
+    document.getElementById('mp-lobby-msg').textContent = '金幣不夠喔，回去多練幾個字吧！';
+    return;
+  }
+  coins -= MP_RACE_COST; syncCoinDisplay(); saveCoins();
+  mpRoomCode = randomRoomCode();
+  document.getElementById('mp-code-display').textContent = mpRoomCode;
+  document.getElementById('mp-wait-msg').textContent = '等待朋友加入中...🕐';
+  document.getElementById('mp-lobby-choose').style.display = 'none';
+  document.getElementById('mp-lobby-waiting').style.display = '';
+  connectMultiChannel(mpRoomCode, {
+    onJoin(){
+      const goAt = Date.now() + 3000;
+      mpChannel.send({type:'broadcast', event:'start', payload:{goAt}});
+      startMultiCountdown(goAt);
+    }
+  });
+}
+function joinMultiRace(){
+  const code = document.getElementById('mp-join-code').value.trim();
+  if(!/^\d{4}$/.test(code)){
+    document.getElementById('mp-lobby-msg').textContent = '請輸入朋友給你的 4 位數邀請碼';
+    return;
+  }
+  if(coins < MP_RACE_COST){
+    document.getElementById('mp-lobby-msg').textContent = '金幣不夠喔，回去多練幾個字吧！';
+    return;
+  }
+  coins -= MP_RACE_COST; syncCoinDisplay(); saveCoins();
+  mpRoomCode = code;
+  document.getElementById('mp-lobby-msg').textContent = '';
+  document.getElementById('mp-wait-msg').textContent = '正在連線到朋友的房間...🕐';
+  document.getElementById('mp-lobby-choose').style.display = 'none';
+  document.getElementById('mp-lobby-waiting').style.display = '';
+  connectMultiChannel(mpRoomCode, {
+    onSubscribed(){
+      mpChannel.send({type:'broadcast', event:'join', payload:{}});
+      mpWaitTimeout = setTimeout(()=>{
+        document.getElementById('mp-wait-msg').textContent = '找不到朋友的房間，請確認邀請碼，或請朋友重新建立房間';
+      }, MP_JOIN_TIMEOUT_MS);
+    }
+  });
+}
+function cancelMultiRace(){
+  coins += MP_RACE_COST; syncCoinDisplay(); saveCoins();
+  leaveMultiRaceLobby();
+}
+function leaveMultiRaceLobby(){
+  if(mpChannel) mpChannel.send({type:'broadcast', event:'leave', payload:{}});
+  cleanupMultiChannel();
+  showScreen('screen-race-mode');
+}
+function handleMpOpponentLeave(){
+  if(document.getElementById('screen-race-multi-lobby').classList.contains('active')){
+    document.getElementById('mp-wait-msg').textContent = '朋友離開了，請重新開始';
+  } else if(document.getElementById('screen-race-multi').classList.contains('active') && mpActive){
+    mpActive = false;
+    document.removeEventListener('keydown', handleMpRaceKeydown);
+    document.getElementById('mp-race-msg').textContent = '朋友離開了比賽 😢';
+    setTimeout(()=>{ cleanupMultiChannel(); showScreen('screen-arcade'); }, 2000);
+  }
+}
+function cleanupMultiChannel(){
+  if(mpWaitTimeout){ clearTimeout(mpWaitTimeout); mpWaitTimeout = null; }
+  if(mpChannel){ sb.removeChannel(mpChannel); mpChannel = null; }
+}
+function startMultiCountdown(goAt){
+  if(!goAt) return;
+  if(mpWaitTimeout){ clearTimeout(mpWaitTimeout); mpWaitTimeout = null; }
+  document.getElementById('mp-lobby-waiting').style.display = 'none';
+  document.getElementById('mp-lobby-countdown').style.display = '';
+  const numEl = document.getElementById('mp-countdown-num');
+  (function tick(){
+    const remain = Math.ceil((goAt - Date.now()) / 1000);
+    if(remain <= 0){
+      showScreen('screen-race-multi');
+      startMultiRaceMatch();
+      return;
+    }
+    numEl.textContent = remain;
+    setTimeout(tick, 200);
+  })();
+}
+function startMultiRaceMatch(){
+  mpQuestionIndex = 0;
+  mpProgress = 0;
+  mpOpponentProgress = 0;
+  mpActive = true;
+  mpLocked = false;
+  mpResultShown = false;
+  document.getElementById('mp-race-msg').textContent = '';
+  document.getElementById('mp-race-car-player').style.left = '25%';
+  document.getElementById('mp-race-car-player').style.setProperty('--race-player-color', currentCarColor());
+  document.getElementById('mp-race-hitzone-left').onclick = () => pickMpRaceAnswer('left');
+  document.getElementById('mp-race-hitzone-right').onclick = () => pickMpRaceAnswer('right');
+  document.addEventListener('keydown', handleMpRaceKeydown);
+  updateMpRaceCars();
+  nextMpRaceQuestion();
+}
+function handleMpRaceKeydown(e){
+  if(!mpActive || mpLocked) return;
+  if(e.key === 'ArrowLeft') pickMpRaceAnswer('left');
+  else if(e.key === 'ArrowRight') pickMpRaceAnswer('right');
+}
+function nextMpRaceQuestion(){
+  mpQuestionIndex++;
+  document.getElementById('mp-race-qnum').textContent = mpQuestionIndex;
+  mpCurrentChar = pickWeightedFrom(Object.keys(charData));
+  const data = charData[mpCurrentChar];
+  document.getElementById('mp-race-char').textContent = mpCurrentChar;
+  const wrongOptions = data.options.filter(o => o !== data.zhuyin);
+  const wrongPick = wrongOptions[Math.floor(Math.random()*wrongOptions.length)];
+  const pair = shuffleArray([data.zhuyin, wrongPick]);
+  mpCorrectSide = pair[0] === data.zhuyin ? 'left' : 'right';
+  const leftSign = document.getElementById('mp-race-sign-left');
+  const rightSign = document.getElementById('mp-race-sign-right');
+  leftSign.className = 'race-answer-sign';
+  rightSign.className = 'race-answer-sign';
+  leftSign.textContent = pair[0];
+  rightSign.textContent = pair[1];
+}
+function pickMpRaceAnswer(side){
+  if(!mpActive || mpLocked) return;
+  mpLocked = true;
+  const isCorrect = side === mpCorrectSide;
+  const chosenSign = document.getElementById(side === 'left' ? 'mp-race-sign-left' : 'mp-race-sign-right');
+  chosenSign.classList.add(isCorrect ? 'correct' : 'wrong');
+  if(!isCorrect){
+    const correctSign = document.getElementById(mpCorrectSide === 'left' ? 'mp-race-sign-left' : 'mp-race-sign-right');
+    correctSign.classList.add('correct');
+  }
+  document.getElementById('mp-race-car-player').style.left = (side === 'left' ? 25 : 75) + '%';
+  mpProgress += isCorrect ? RACE_SPRINT_STEP : RACE_SLOW_STEP;
+  if(isCorrect) playRaceMoveSound(); else playRaceBlockedSound();
+  updateMpRaceCars();
+  broadcastMpProgress();
+
+  const selfDone = mpProgress >= RACE_FINISH || mpQuestionIndex >= RACE_QUESTION_COUNT;
+  setTimeout(()=>{
+    mpLocked = false;
+    if(selfDone) finishMultiRaceSelf();
+    else nextMpRaceQuestion();
+  }, 600);
+}
+function updateMpRaceCars(){
+  document.getElementById('mp-race-car-player').style.bottom = Math.min(mpProgress, RACE_FINISH) + '%';
+  document.getElementById('mp-race-car-opponent').style.bottom = Math.min(mpOpponentProgress, RACE_FINISH) + '%';
+}
+function broadcastMpProgress(){
+  if(mpChannel) mpChannel.send({type:'broadcast', event:'progress', payload:{pct: mpProgress}});
+}
+function receiveMpOpponentProgress(payload){
+  if(!payload) return;
+  mpOpponentProgress = Math.max(mpOpponentProgress, payload.pct || 0);
+  updateMpRaceCars();
+  if(mpActive && mpOpponentProgress >= RACE_FINISH) finishMultiRaceSelf();
+}
+function finishMultiRaceSelf(){
+  if(!mpActive) return;
+  mpActive = false;
+  document.removeEventListener('keydown', handleMpRaceKeydown);
+  document.getElementById('mp-race-hitzone-left').onclick = null;
+  document.getElementById('mp-race-hitzone-right').onclick = null;
+  if(mpChannel) mpChannel.send({type:'broadcast', event:'finish', payload:{pct: mpProgress}});
+  renderMpRaceResult();
+}
+function receiveMpOpponentFinish(payload){
+  if(!payload) return;
+  mpOpponentProgress = Math.max(mpOpponentProgress, payload.pct || 0);
+  updateMpRaceCars();
+  if(mpActive) finishMultiRaceSelf();
+  else renderMpRaceResult();
+}
+function renderMpRaceResult(){
+  if(mpResultShown) return;
+  mpResultShown = true;
+  let msg;
+  if(mpProgress > mpOpponentProgress){
+    playRaceWinSound();
+    incrementRaceWins();
+    msg = '衝過終點線，你贏了！🏆';
+  } else if(mpProgress === mpOpponentProgress){
+    msg = '你們同時衝線，打成平手！握手言和 🤝';
+  } else {
+    msg = '朋友先衝過終點，差一點點，再挑戰一次吧！';
+  }
+  document.getElementById('mp-race-msg').textContent = msg;
+  setTimeout(()=>{ cleanupMultiChannel(); showScreen('screen-arcade'); }, 2500);
+}
+function leaveMultiRaceMatch(){
+  if(mpActive){
+    mpActive = false;
+    document.removeEventListener('keydown', handleMpRaceKeydown);
+    if(mpChannel) mpChannel.send({type:'broadcast', event:'leave', payload:{}});
+  }
+  cleanupMultiChannel();
+  showScreen('screen-arcade');
 }
 
 // ---- 打氣球 ----
