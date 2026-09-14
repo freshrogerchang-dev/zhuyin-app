@@ -322,6 +322,11 @@
   .mp-countdown-num{
     font-size:72px;font-weight:900;color:var(--coral);margin:14px 0;
   }
+  .duel-badge{
+    display:inline-block;font-size:13px;font-weight:700;color:var(--ink);
+    background:#FFF3D6;border:2px solid var(--sun);border-radius:10px;
+    padding:4px 10px;margin-top:6px;
+  }
 
   .parent-link{
     background:none;border:none;color:#8792a6;font-size:12px;
