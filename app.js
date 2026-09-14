@@ -283,7 +283,7 @@ function pickWeightedFrom(keys){
   return weighted[Math.floor(Math.random()*weighted.length)];
 }
 
-const GAME_SCREEN_MUSIC = { 'screen-mole': 'mole', 'screen-memory': 'memory', 'screen-match': 'match', 'screen-race': 'race', 'screen-race-multi': 'race', 'screen-balloon': 'balloon' };
+const GAME_SCREEN_MUSIC = { 'screen-mole': 'mole', 'screen-memory': 'memory', 'screen-match': 'match', 'screen-race': 'race', 'screen-race-multi': 'race', 'screen-balloon': 'balloon', 'screen-fish': 'mole' };
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -1486,6 +1486,7 @@ function playGame(game, cost, msgElId){
   else if(game==='match'){ showScreen('screen-match'); startMatch(); }
   else if(game==='race'){ showScreen('screen-race'); startRace(); }
   else if(game==='balloon'){ showScreen('screen-balloon'); startBalloon(); }
+  else if(game==='fish'){ showScreen('screen-fish'); startFish(); }
 }
 
 function shuffleArray(arr){
@@ -2029,6 +2030,7 @@ const DUEL_GAMES = {
   memory:  { title:'翻牌配對', emoji:'🃏', screen:'screen-memory',  msgEl:'memory-msg',  lowerWins:true,  unit:'次' },
   match:   { title:'字音配對', emoji:'🔗', screen:'screen-match',   msgEl:'match-msg',   lowerWins:true,  unit:'秒' },
   balloon: { title:'打氣球',   emoji:'🎈', screen:'screen-balloon', msgEl:'balloon-msg', lowerWins:false, unit:'分' },
+  fish:    { title:'比賽釣魚', emoji:'🎣', screen:'screen-fish',    msgEl:'fish-msg',    lowerWins:false, unit:'分' },
 };
 let duelPendingGame = null, duelPendingCost = 0;
 let duelGameKey = null, duelCost = 0;
@@ -2176,6 +2178,7 @@ function beginDuelPlay(){
   else if(duelGameKey === 'memory') startMemory();
   else if(duelGameKey === 'match') startMatch();
   else if(duelGameKey === 'balloon') startBalloon();
+  else if(duelGameKey === 'fish') startFish();
 }
 function showDuelBadge(){
   const el = document.getElementById(duelGameKey + '-duel-badge');
@@ -2341,6 +2344,80 @@ function finishBalloon(){
   } else {
     document.getElementById('balloon-msg').textContent = `打氣球結束！戳對了 ${balloonScore} / ${BALLOON_ROUND_COUNT} 個 🎈`;
     setTimeout(()=> showScreen('screen-arcade'), 2000);
+  }
+}
+
+// ---- 比賽釣魚 ----
+// 藍色毛怪(你)跟綠色大眼仔(跟朋友對戰時才會出現的朋友)一起釣魚:
+// 畫面上方出現一個國字，池塘裡游著 4 條魚，每條魚身上寫一個候選注音，
+// 釣到寫著正確注音的魚就得一分、馬上換下一題，釣錯的魚甩一下可以再試，
+// 限時 30 秒，看誰在時間內釣到最多正確的魚(玩法跟打地鼠一樣是限時搶分，
+// 只是把「隨機打地鼠」換成「找出正確注音」)。
+const FISH_DURATION = 30;
+let fishTimer = null, fishTimeLeft = FISH_DURATION, fishScore = 0, fishActive = false;
+let fishCurrentChar = null, fishCorrectAnswer = null;
+
+function startFish(){
+  fishScore = 0;
+  fishTimeLeft = FISH_DURATION;
+  fishActive = true;
+  document.getElementById('fish-score').textContent = 0;
+  document.getElementById('fish-time').textContent = fishTimeLeft;
+  document.getElementById('fish-msg').textContent = '';
+  clearInterval(fishTimer);
+  nextFishRound();
+  fishTimer = setInterval(()=>{
+    fishTimeLeft--;
+    document.getElementById('fish-time').textContent = fishTimeLeft;
+    if(fishTimeLeft<=0){
+      clearInterval(fishTimer);
+      fishActive = false;
+      document.getElementById('fish-pond').innerHTML = '';
+      if(duelActive && duelGameKey==='fish'){
+        reportDuelFinish(fishScore);
+      } else {
+        document.getElementById('fish-msg').textContent = `時間到！釣到 ${fishScore} 隻正確的魚 🎣`;
+        setTimeout(()=> showScreen('screen-arcade'), 2000);
+      }
+    }
+  }, 1000);
+}
+function nextFishRound(){
+  fishCurrentChar = pickWeightedFrom(Object.keys(charData));
+  const data = charData[fishCurrentChar];
+  document.getElementById('fish-char').textContent = fishCurrentChar;
+  fishCorrectAnswer = data.zhuyin;
+  const pond = document.getElementById('fish-pond');
+  pond.innerHTML = '';
+  shuffleArray(data.options.slice()).forEach(opt=>{
+    const fish = document.createElement('div');
+    fish.className = 'fish-item';
+    const emoji = document.createElement('div');
+    emoji.className = 'fish-emoji';
+    emoji.textContent = '🐟';
+    const label = document.createElement('div');
+    label.className = 'fish-label';
+    label.textContent = opt;
+    fish.appendChild(emoji);
+    fish.appendChild(label);
+    fish.onclick = () => catchFish(fish, label, opt === fishCorrectAnswer);
+    pond.appendChild(fish);
+  });
+}
+function catchFish(fish, label, isCorrect){
+  if(!fishActive) return;
+  if(isCorrect){
+    playBalloonPopSound();
+    label.classList.add('correct');
+    fish.onclick = null;
+    fishScore++;
+    document.getElementById('fish-score').textContent = fishScore;
+    if(duelActive && duelGameKey==='fish') reportDuelProgress(fishScore);
+    setTimeout(()=>{ if(fishActive) nextFishRound(); }, 350);
+  } else {
+    playMismatchSound();
+    label.classList.add('wrong');
+    setTimeout(()=> label.classList.remove('wrong'), 300);
   }
 }
 

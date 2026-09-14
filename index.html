@@ -298,6 +298,11 @@
           <div class="info"><b>打氣球</b><span>花 5 🪙 玩一次</span></div>
           <button onclick="openDuelMode('balloon',5)">玩</button>
         </div>
+        <div class="game-card">
+          <div class="emoji">🎣</div>
+          <div class="info"><b>比賽釣魚</b><span>花 5 🪙 玩一次</span></div>
+          <button onclick="openDuelMode('fish',5)">玩</button>
+        </div>
       </div>
       <div class="msg" id="arcade-msg"></div>
     </div>
@@ -577,6 +582,49 @@
       <div class="balloon-char" id="balloon-char"></div>
       <div class="balloon-sky" id="balloon-sky"></div>
       <div class="msg" id="balloon-msg"></div>
+    </div>
+  </div>
+
+  <!-- 比賽釣魚 -->
+  <div class="screen" id="screen-fish">
+    <div class="topbar">
+      <button class="back-btn" onclick="leaveDuelMatch()">← 返回</button>
+      <div class="coin-badge"><span class="icon">🪙</span><span class="coin-count">8</span></div>
+    </div>
+    <div class="card">
+      <h2>比賽釣魚</h2>
+      <p class="sub" style="margin-bottom:0;">看國字，釣起寫著正確注音的魚！</p>
+      <div class="mole-stats">
+        <span>⏱ <span id="fish-time">30</span>s</span>
+        <span>分數：<span id="fish-score">0</span></span>
+      </div>
+      <div class="fish-char" id="fish-char"></div>
+      <div class="fish-scene">
+        <div class="fish-monster">
+          <svg class="fish-monster-svg" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="30" cy="36" rx="22" ry="20" fill="#4A78E0" stroke="#1F2A44" stroke-width="3"/>
+            <path d="M16 20 L21 6 L26 20 Z" fill="#3A63C2" stroke="#1F2A44" stroke-width="2"/>
+            <path d="M34 20 L39 6 L44 20 Z" fill="#3A63C2" stroke="#1F2A44" stroke-width="2"/>
+            <circle cx="22" cy="34" r="7" fill="white" stroke="#1F2A44" stroke-width="2"/>
+            <circle cx="38" cy="34" r="7" fill="white" stroke="#1F2A44" stroke-width="2"/>
+            <circle cx="22" cy="35" r="3" fill="#1F2A44"/>
+            <circle cx="38" cy="35" r="3" fill="#1F2A44"/>
+            <path d="M22 47 Q30 53 38 47" fill="none" stroke="#1F2A44" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <div class="fish-monster-label">你</div>
+        </div>
+        <div class="fish-pond" id="fish-pond"></div>
+        <div class="fish-monster" id="fish-duel-badge" style="display:none;">
+          <svg class="fish-monster-svg" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="30" cy="36" rx="22" ry="20" fill="#4CAF7D" stroke="#1F2A44" stroke-width="3"/>
+            <circle cx="30" cy="32" r="13" fill="white" stroke="#1F2A44" stroke-width="2.5"/>
+            <circle cx="30" cy="33" r="6" fill="#1F2A44"/>
+            <path d="M20 48 Q30 54 40 48" fill="none" stroke="#1F2A44" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <div class="fish-monster-label" id="fish-duel-text">對手：-</div>
+        </div>
+      </div>
+      <div class="msg" id="fish-msg"></div>
     </div>
   </div>
 
