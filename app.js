@@ -5,6 +5,8 @@ let hintUsed = false;
 let currentChar = '大';
 let writer = null;
 let progressMap = {}; // key: 字/注音符號 -> {best_reward, perfect_count, attempt_count}
+let progressLoading = true;
+let progressLoadFailed = false;
 
 let currentZhuyinIndex = 0;
 
@@ -149,6 +151,9 @@ function syncCoinDisplay(){
 
 // ---- Supabase：讀取/寫入進度與金幣 ----
 async function initFromSupabase(){
+  progressLoading = true;
+  progressLoadFailed = false;
+  renderDailySummary();
   if(activeProfileId === 1){
     try{
       const { data: stateRow } = await sb.from('zhuyin_app_state').select('*').eq('id',1).maybeSingle();
@@ -158,7 +163,8 @@ async function initFromSupabase(){
   }
 
   try{
-    const { data: rows } = await sb.from('zhuyin_app_char_progress').select('*');
+    const { data: rows, error } = await sb.from('zhuyin_app_char_progress').select('*');
+    if(error) throw error;
     (rows||[]).forEach(r=>{
       const rawKey = rawKeyForRow(r.character);
       if(rawKey === null) return;
@@ -175,13 +181,15 @@ async function initFromSupabase(){
       bestStreak = streakRow.perfect_count || 0;
       lastPracticeDateStr = streakRow.updated_at ? localDateStr(new Date(streakRow.updated_at)) : null;
     }
-  }catch(e){ console.warn('讀取練習紀錄失敗', e); }
+  }catch(e){ progressLoadFailed = true; console.warn('讀取練習紀錄失敗', e); }
 
+  progressLoading = false;
   syncCoinDisplay();
   renderCharSelectGrid();
   updateHomeMascot();
   updateHomeStreakDisplay();
   updateActiveProfileLabel();
+  renderDailySummary();
 }
 
 // 每天第一次完成練習(不管是國字/注音/詞語/字母)才會累加一次，同一天內
@@ -274,7 +282,7 @@ function pickWeightedFrom(keys){
 
     if(p && p.updated_at){
       const daysSince = (now - new Date(p.updated_at).getTime()) / 86400000;
-      const dueAfterDays = p.best_reward < 3 ? 2 : (p.perfect_count >= 2 ? 14 : 7);
+      const dueAfterDays = PracticePlan.reviewInterval(p);
       const overdueRatio = daysSince / dueAfterDays;
       if(overdueRatio > 1) weight += Math.min(6, Math.floor(overdueRatio * 2));
     }
@@ -287,9 +295,14 @@ const GAME_SCREEN_MUSIC = { 'screen-mole': 'mole', 'screen-memory': 'memory', 's
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
   if(GAME_SCREEN_MUSIC[id]) startGameMusic(GAME_SCREEN_MUSIC[id]);
   else stopGameMusic();
-  if(id === 'screen-home'){ updateHomeMascot(); updateHomeStreakDisplay(); }
+  if(id === 'screen-home'){
+    dailyPracticeSession = false;
+    updateHomeMascot(); updateHomeStreakDisplay(); renderDailySummary();
+  }
+  if(id === 'screen-daily') renderDailyPractice();
 }
 
 function speak(text, lang){
@@ -503,6 +516,7 @@ function showResult(coinReward){
   document.getElementById('result-mascot').textContent = meta.mascot;
   document.getElementById('result-coin-pop').textContent = `+${coinReward} 🪙`;
   showScreen('screen-result');
+  updateDailyResult();
   syncCoinDisplay();
   playCoinSound();
   saveCoins();
@@ -511,6 +525,7 @@ function backToHomeFromResult(){ showScreen('screen-home'); }
 
 // ---- 選字 / 國字練習流程 ----
 function openCharSelect(){
+  dailyPracticeSession = false;
   renderCharSelectGrid();
   showScreen('screen-char-select');
 }
@@ -717,9 +732,9 @@ function finishWriting(writeMistakes){
 }
 
 // ---- 注音符號練習流程 ----
-function startZhuyinPractice(){
+function startZhuyinPractice(symbol){
   const symbols = zhuyinData.map(z=>z.symbol);
-  const picked = pickWeightedFrom(symbols);
+  const picked = symbols.includes(symbol) ? symbol : pickWeightedFrom(symbols);
   currentZhuyinIndex = zhuyinData.findIndex(z=>z.symbol===picked);
   document.getElementById('zhuyin-symbol-display').textContent = zhuyinData[currentZhuyinIndex].symbol;
   document.getElementById('zhuyin-example-label').textContent = `例字：${zhuyinData[currentZhuyinIndex].example}`;
@@ -898,8 +913,8 @@ function finishZhuyinWriting(){
 let currentWord = '', currentWordChars = [], currentWordIndex = 0;
 let wordWriter = null, wordTotalMistakes = 0, wordHintUsed = false;
 
-function startWordPractice(){
-  currentWord = pickWeightedFrom(wordData);
+function startWordPractice(word){
+  currentWord = wordData.includes(word) ? word : pickWeightedFrom(wordData);
   currentWordChars = currentWord.split('');
   const wrap = document.getElementById('word-display');
   wrap.innerHTML = '';
@@ -1049,8 +1064,8 @@ let letterGuideAlpha = 0.18;
 let letterAutoFinishTimer = null;
 let letterStrokeAttempts = 0;
 
-function startLetterPractice(){
-  currentLetter = pickWeightedFrom(Object.keys(letterData));
+function startLetterPractice(letter){
+  currentLetter = Object.prototype.hasOwnProperty.call(letterData, letter) ? letter : pickWeightedFrom(Object.keys(letterData));
   showScreen('screen-letter-intro');
   setupLetterIntro();
   speakLetterWithCase(currentLetter);
@@ -1371,7 +1386,19 @@ function currentCarColor(){
 }
 function updateHomeMascot(){
   const el = document.getElementById('home-mascot');
-  if(el) el.textContent = currentMascotEmoji();
+  if(!el) return;
+  const mascot = currentMascotEmoji();
+  if(mascot === '🦒'){
+    const img = document.createElement('img');
+    img.src = 'assets/giraffe-guide.svg';
+    img.alt = '拿著鉛筆的長頸鹿學習夥伴';
+    img.width = 160;
+    img.height = 180;
+    el.replaceChildren(img);
+  } else {
+    el.textContent = mascot;
+    el.setAttribute('aria-label', '已解鎖的學習夥伴');
+  }
 }
 
 function renderBadges(){
