@@ -293,6 +293,12 @@ function pickWeightedFrom(keys){
 
 const GAME_SCREEN_MUSIC = { 'screen-mole': 'mole', 'screen-memory': 'memory', 'screen-match': 'match', 'screen-race': 'race', 'screen-race-multi': 'race', 'screen-balloon': 'balloon', 'screen-fish': 'mole' };
 function showScreen(id){
+  cancelLearningSpeech();
+  if(id !== 'screen-balloon'){
+    balloonRoundActive = false;
+    balloonTimers.forEach(clearTimeout);
+    balloonTimers = [];
+  }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   window.scrollTo(0, 0);
@@ -306,11 +312,15 @@ function showScreen(id){
 }
 
 function speak(text, lang){
+  cancelLearningSpeech();
   if(!('speechSynthesis' in window)) return;
   const u = new SpeechSynthesisUtterance(text);
   u.lang = lang || 'zh-TW';
   u.rate = 0.6;
-  speechSynthesis.cancel();
+  setTaiwanVoice(u);
+  const generation = speechGeneration;
+  learningSpeechActive = true;
+  u.onend = u.onerror = ()=>{ if(generation === speechGeneration) learningSpeechActive = false; };
   speechSynthesis.speak(u);
 }
 
@@ -318,16 +328,21 @@ function speak(text, lang){
 // 前一句，如果只是快速連續呼叫 speak() 沒辦法排成一串完整唸完，所以
 // 這裡改成等上一句的 onend 觸發後才接著唸下一句)。
 function speakSequence(texts, lang){
+  cancelLearningSpeech();
   if(!('speechSynthesis' in window) || !texts.length) return;
-  speechSynthesis.cancel();
+  const generation = speechGeneration;
   let i = 0;
   function playNext(){
-    if(i >= texts.length) return;
+    if(generation !== speechGeneration) return;
+    if(i >= texts.length){ learningSpeechActive = false; return; }
     const u = new SpeechSynthesisUtterance(texts[i]);
     u.lang = lang || 'zh-TW';
     u.rate = 0.6;
+    setTaiwanVoice(u);
+    learningSpeechActive = true;
     i++;
-    if(i < texts.length) u.onend = playNext;
+    u.onend = playNext;
+    u.onerror = ()=>{ if(generation === speechGeneration) learningSpeechActive = false; };
     speechSynthesis.speak(u);
   }
   playNext();
@@ -491,7 +506,7 @@ function startGameMusic(game){
     _bgmStep = 0;
     const step = () => {
       const [freq, dur] = track.notes[_bgmStep % track.notes.length];
-      playTone(ctx, freq, ctx.currentTime, dur, track.waveType, track.volume);
+      playTone(ctx, freq, ctx.currentTime, dur, track.waveType, track.volume * (learningSpeechActive ? 0.25 : 1));
       _bgmStep++;
       _bgmTimer = setTimeout(step, dur * 1000);
     };
@@ -631,7 +646,7 @@ function renderListenOptions(){
   shuffled.forEach(opt => {
     const btn = document.createElement('button');
     btn.className = 'option-btn';
-    btn.textContent = opt;
+    renderVerticalZhuyin(btn, opt);
     btn.onclick = () => pickAnswer(btn, opt === data.zhuyin);
     wrap.appendChild(btn);
   });
@@ -741,11 +756,10 @@ function startZhuyinPractice(symbol){
   showScreen('screen-zhuyin-intro');
   speakZhuyinExample();
 }
-// 先唸三次注音符號本身，再唸例字的完整詞語(例如「ㄅㄅㄅ，爸爸」)，
-// 這樣小朋友可以先聽到符號的發音，再聽到它在真實詞語裡的樣子。
+// 符號只播放一次教育部錄音；例字由另一個按鈕單獨朗讀。
 function speakZhuyinExample(){
   const entry = zhuyinData[currentZhuyinIndex];
-  speakSequence([entry.symbol, entry.symbol, entry.symbol, entry.example]);
+  playZhuyinSymbol(entry.symbol);
 }
 
 let zCanvas, zCtx, zDrawing=false;
@@ -1076,18 +1090,24 @@ function startLetterPractice(letter){
 // 兩段分開唸(用 onend 接下一段)，是因為 speak() 每次呼叫都會 cancel 前一句，
 // 混著中英文放進同一句 utterance 也常常會被單一語言的語音引擎唸錯或跳過。
 function speakLetterWithCase(letter){
+  cancelLearningSpeech();
   if(!('speechSynthesis' in window)) return;
+  const generation = speechGeneration;
   const isUpper = letter === letter.toUpperCase() && letter !== letter.toLowerCase();
   const u1 = new SpeechSynthesisUtterance(isUpper ? '大寫' : '小寫');
   u1.lang = 'zh-TW';
   u1.rate = 0.6;
+  setTaiwanVoice(u1);
+  learningSpeechActive = true;
   u1.onend = () => {
+    if(generation !== speechGeneration) return;
     const u2 = new SpeechSynthesisUtterance(letter);
     u2.lang = 'en-US';
     u2.rate = 0.6;
+    u2.onend = u2.onerror = ()=>{ if(generation === speechGeneration) learningSpeechActive = false; };
     speechSynthesis.speak(u2);
   };
-  speechSynthesis.cancel();
+  u1.onerror = ()=>{ if(generation === speechGeneration) learningSpeechActive = false; };
   speechSynthesis.speak(u1);
 }
 
@@ -1583,6 +1603,7 @@ function shuffleArray(arr){
 // ---- 打地鼠 ----
 let moleTimer, moleActive, moleScore, moleUpIndex;
 function startMole(){
+  speakGameQuestion('screen-mole', '點一下出現的小地鼠。');
   const grid = document.getElementById('mole-grid');
   grid.innerHTML = '';
   moleScore = 0;
@@ -1647,6 +1668,7 @@ const memoryEmojiSet = ['🐶','🐱','🐰','🐻','🐵','🦊'];
 let memoryCards = [], memoryFlipped = [], memoryMoves = 0, memoryMatchedCount = 0, memoryLock = false;
 
 function startMemory(){
+  speakGameQuestion('screen-memory', '翻開卡片，找出一樣的動物。');
   memoryMoves = 0;
   memoryMatchedCount = 0;
   memoryFlipped = [];
@@ -1673,6 +1695,7 @@ function flipMemoryCard(id){
   const card = memoryCards.find(c=>c.id===id);
   if(card.flipped || card.matched) return;
   card.flipped = true;
+  speakGameQuestion('screen-memory', MEMORY_SPOKEN_NAMES[card.symbol]);
   memoryFlipped.push(card);
   playFlipSound();
   renderMemoryGrid();
@@ -1713,6 +1736,7 @@ function flipMemoryCard(id){
 let matchPairs = [], matchZhuyinOrder = [], matchSelectedChar = null, matchSelectedZhuyin = null, matchSolvedCount = 0, matchStartTime = 0;
 
 function startMatch(){
+  speakGameQuestion('screen-match', '點選國字，聽發音，再找出相同的注音。');
   const chosenChars = shuffleArray(Object.keys(charData).slice()).slice(0,5);
   matchPairs = chosenChars.map(c=>({char:c, zhuyin:charData[c].zhuyin, solved:false}));
   matchZhuyinOrder = shuffleArray(matchPairs.map(p=>p.zhuyin));
@@ -1739,12 +1763,12 @@ function renderMatchColumns(){
     const pair = matchPairs.find(p=>p.zhuyin===z);
     const el = document.createElement('div');
     el.className = 'match-item' + (pair.solved ? ' correct' : (matchSelectedZhuyin===z ? ' selected' : ''));
-    el.textContent = z;
+    renderVerticalZhuyin(el, z);
     if(!pair.solved) el.onclick = () => selectMatchZhuyin(z);
     colZhuyin.appendChild(el);
   });
 }
-function selectMatchChar(c){ matchSelectedChar = c; renderMatchColumns(); tryMatchResolve(); }
+function selectMatchChar(c){ speakGameQuestion('screen-match',c); matchSelectedChar = c; renderMatchColumns(); tryMatchResolve(); }
 function selectMatchZhuyin(z){ matchSelectedZhuyin = z; renderMatchColumns(); tryMatchResolve(); }
 function tryMatchResolve(){
   if(matchSelectedChar===null || matchSelectedZhuyin===null) return;
@@ -1811,6 +1835,7 @@ function nextRaceQuestion(){
   raceCurrentChar = pickWeightedFrom(Object.keys(charData));
   const data = charData[raceCurrentChar];
   document.getElementById('race-char').textContent = raceCurrentChar;
+  speakGameQuestion('screen-race',raceCurrentChar);
   const wrongOptions = data.options.filter(o => o !== data.zhuyin);
   const wrongPick = wrongOptions[Math.floor(Math.random()*wrongOptions.length)];
   const pair = shuffleArray([data.zhuyin, wrongPick]);
@@ -1819,8 +1844,8 @@ function nextRaceQuestion(){
   const rightSign = document.getElementById('race-sign-right');
   leftSign.className = 'race-answer-sign';
   rightSign.className = 'race-answer-sign';
-  leftSign.textContent = pair[0];
-  rightSign.textContent = pair[1];
+  renderVerticalZhuyin(leftSign, pair[0]);
+  renderVerticalZhuyin(rightSign, pair[1]);
 }
 function pickRaceAnswer(side){
   if(!raceActive || raceLocked) return;
@@ -2013,6 +2038,7 @@ function nextMpRaceQuestion(){
   mpCurrentChar = pickWeightedFrom(Object.keys(charData));
   const data = charData[mpCurrentChar];
   document.getElementById('mp-race-char').textContent = mpCurrentChar;
+  speakGameQuestion('screen-race-multi',mpCurrentChar);
   const wrongOptions = data.options.filter(o => o !== data.zhuyin);
   const wrongPick = wrongOptions[Math.floor(Math.random()*wrongOptions.length)];
   const pair = shuffleArray([data.zhuyin, wrongPick]);
@@ -2021,8 +2047,8 @@ function nextMpRaceQuestion(){
   const rightSign = document.getElementById('mp-race-sign-right');
   leftSign.className = 'race-answer-sign';
   rightSign.className = 'race-answer-sign';
-  leftSign.textContent = pair[0];
-  rightSign.textContent = pair[1];
+  renderVerticalZhuyin(leftSign, pair[0]);
+  renderVerticalZhuyin(rightSign, pair[1]);
 }
 function pickMpRaceAnswer(side){
   if(!mpActive || mpLocked) return;
@@ -2332,8 +2358,8 @@ function leaveDuelMatch(){
 // 要在氣球飄出畫面之前戳破寫著正確答案的那一顆。戳到錯的只是消失，
 // 不會扣分也不會結束這一回合，步調比打地鼠寬鬆，適合大班孩子。
 const BALLOON_ROUND_COUNT = 8;
-const BALLOON_RISE_SECONDS = 7;
-const BALLOON_LANES = [10, 35, 60, 85]; // 氣球在天空裡的左邊位置(百分比)
+const BALLOON_RISE_SECONDS = 14;
+const BALLOON_LANES = [13, 38, 62, 87]; // 直式標籤預留兩側空間，避免窄螢幕裁切
 let balloonRound = 0, balloonScore = 0, balloonCurrentChar = null, balloonRoundActive = false;
 let balloonTimers = [];
 
@@ -2346,6 +2372,7 @@ function startBalloon(){
 }
 
 function nextBalloonRound(){
+  if(!document.getElementById('screen-balloon').classList.contains('active')) return;
   balloonTimers.forEach(t=>clearTimeout(t));
   balloonTimers = [];
   const sky = document.getElementById('balloon-sky');
@@ -2360,7 +2387,7 @@ function nextBalloonRound(){
   balloonCurrentChar = pickWeightedFrom(Object.keys(charData));
   const data = charData[balloonCurrentChar];
   document.getElementById('balloon-char').textContent = balloonCurrentChar;
-  speak(balloonCurrentChar);
+  speakGameQuestion('screen-balloon',balloonCurrentChar);
   balloonRoundActive = true;
 
   shuffleArray(data.options.slice()).forEach((opt, i)=>{
@@ -2368,14 +2395,14 @@ function nextBalloonRound(){
     balloon.className = 'balloon';
     balloon.style.left = BALLOON_LANES[i] + '%';
     balloon.style.filter = `hue-rotate(${i * 70}deg)`;
-    balloon.style.bottom = '-70px';
+    balloon.style.bottom = '0px';
 
     const emoji = document.createElement('div');
     emoji.className = 'balloon-emoji';
     emoji.textContent = '🎈';
     const label = document.createElement('div');
     label.className = 'balloon-label';
-    label.textContent = opt;
+    renderVerticalZhuyin(label, opt);
     balloon.appendChild(emoji);
     balloon.appendChild(label);
     balloon.onclick = () => popBalloon(balloon, opt === data.zhuyin);
@@ -2385,7 +2412,7 @@ function nextBalloonRound(){
     requestAnimationFrame(()=>{
       requestAnimationFrame(()=>{
         balloon.style.transition = `bottom ${BALLOON_RISE_SECONDS}s linear`;
-        balloon.style.bottom = '380px';
+        balloon.style.bottom = `${sky.clientHeight + 10}px`;
       });
     });
 
@@ -2397,7 +2424,7 @@ function nextBalloonRound(){
   balloonTimers.push(setTimeout(()=>{
     if(balloonRoundActive){
       balloonRoundActive = false;
-      setTimeout(()=> nextBalloonRound(), 400);
+      balloonTimers.push(setTimeout(()=> nextBalloonRound(), 400));
     }
   }, BALLOON_RISE_SECONDS * 1000 + 100));
 }
@@ -2413,7 +2440,7 @@ function popBalloon(balloon, isCorrect){
     if(duelActive && duelGameKey==='balloon') reportDuelProgress(balloonScore);
     balloonRoundActive = false;
     setTimeout(()=> balloon.remove(), 250);
-    setTimeout(()=> nextBalloonRound(), 700);
+    balloonTimers.push(setTimeout(()=> nextBalloonRound(), 700));
   } else {
     playMismatchSound();
     setTimeout(()=> balloon.remove(), 250);
@@ -2426,7 +2453,7 @@ function finishBalloon(){
     reportDuelFinish(balloonScore);
   } else {
     document.getElementById('balloon-msg').textContent = `打氣球結束！戳對了 ${balloonScore} / ${BALLOON_ROUND_COUNT} 個 🎈`;
-    setTimeout(()=> showScreen('screen-arcade'), 2000);
+    balloonTimers.push(setTimeout(()=> showScreen('screen-arcade'), 2000));
   }
 }
 
@@ -2469,6 +2496,7 @@ function nextFishRound(){
   fishCurrentChar = pickWeightedFrom(Object.keys(charData));
   const data = charData[fishCurrentChar];
   document.getElementById('fish-char').textContent = fishCurrentChar;
+  speakGameQuestion('screen-fish',fishCurrentChar);
   fishCorrectAnswer = data.zhuyin;
   const pond = document.getElementById('fish-pond');
   pond.innerHTML = '';
@@ -2480,7 +2508,7 @@ function nextFishRound(){
     emoji.textContent = '🐟';
     const label = document.createElement('div');
     label.className = 'fish-label';
-    label.textContent = opt;
+    renderVerticalZhuyin(label, opt);
     fish.appendChild(emoji);
     fish.appendChild(label);
     fish.onclick = () => catchFish(fish, label, opt === fishCorrectAnswer);
@@ -2505,4 +2533,5 @@ function catchFish(fish, label, isCorrect){
 }
 
 loadProfilesFromStorage();
+installGameSpeechButtons();
 initFromSupabase();

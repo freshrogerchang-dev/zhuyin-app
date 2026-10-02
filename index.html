@@ -15,7 +15,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3/dist/hanzi-writer.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="style.css?v=20261002">
+<link rel="stylesheet" href="style.css?v=20261002-audio">
 </head>
 <body>
 <div id="app">
@@ -148,7 +148,10 @@
       <p class="sub" style="margin-bottom:6px;">來認識這個注音符號</p>
       <div class="zhuyin-symbol-big" id="zhuyin-symbol-display">ㄅ</div>
       <p class="sub" id="zhuyin-example-label">例字：爸爸</p>
-      <button class="btn btn-secondary" onclick="speakZhuyinExample()">🔊 聽例字發音</button>
+      <button class="btn btn-secondary" onclick="speakZhuyinExample()">🔊 聽注音發音</button>
+      <button class="btn btn-secondary" onclick="speak(zhuyinData[currentZhuyinIndex].example)">🔊 聽例字</button>
+      <p class="daily-note" id="zhuyin-audio-status" role="status"></p>
+      <p class="audio-credit">注音錄音：<a href="https://language.moe.gov.tw/001/Upload/files/SITE_CONTENT/M0001/deploy/index.html" target="_blank" rel="noopener">教育部《國語注音符號手冊》</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>（未修改）</p>
       <button class="btn btn-primary" onclick="showScreen('screen-zhuyin-write'); setupZhuyinWrite();">下一步：練習寫寫看</button>
     </div>
   </div>
@@ -664,8 +667,9 @@
 
 <script src="config.js"></script>
 <script src="data.js"></script>
+<script src="learning-media.js?v=20261002-audio"></script>
 <script src="practice-plan.js?v=20261002"></script>
 <script src="daily-practice.js?v=20261002"></script>
-<script src="app.js?v=20261002"></script>
+<script src="app.js?v=20261002-audio"></script>
 </body>
 </html>

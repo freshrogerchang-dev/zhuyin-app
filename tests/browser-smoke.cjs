@@ -23,7 +23,7 @@ const server = http.createServer((req,res)=>{
   if(pathname==='/config.js') {res.setHeader('Content-Type','application/javascript');res.end(mockConfig);return;}
   const file = path.resolve(root,'.'+(pathname==='/'?'/index.html':pathname));
   if(!file.startsWith(root+path.sep)){res.writeHead(403);res.end();return;}
-  const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml'};
+  const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.WAV':'audio/wav'};
   if(!mime[path.extname(file)] || !fs.existsSync(file)){res.writeHead(404);res.end();return;}
   res.setHeader('Content-Type',mime[path.extname(file)]);res.end(fs.readFileSync(file));
 });
@@ -103,6 +103,69 @@ const server = http.createServer((req,res)=>{
     await page.getByRole('button',{name:'遊戲時間 用金幣開啟冒險'}).click();
     assert.equal(await page.locator('#screen-arcade.active').count(),1);
     assert.match(await page.locator('#screen-arcade').innerText(),/釣魚/);
+    // Capture utterances deterministically; do not confuse a text assertion with an auditory test.
+    await page.evaluate(()=>{
+      window.spoken=[];
+      speechSynthesis.speak = utterance=>{spoken.push(utterance.text);};
+      speechSynthesis.cancel = ()=>{};
+    });
+    // Decode every unmodified Ministry recording using the real browser audio decoder.
+    const decoded = await page.evaluate(async()=>{
+      const ctx = new AudioContext();
+      const durations=[];
+      for(let i=1;i<=37;i++){
+        const response = await fetch(`assets/audio/zhuyin/F${i}.WAV`);
+        const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
+        durations.push(buffer.duration);
+      }
+      await ctx.close();
+      return durations;
+    });
+    assert.equal(decoded.length,37);
+    assert.ok(decoded.every(seconds=>seconds>0 && seconds<10));
+    await page.evaluate(()=>{startZhuyinPractice('ㄝ');});
+    assert.equal(await page.evaluate(()=>learningAudio.src.endsWith('/F25.WAV')),true);
+    assert.equal(await page.evaluate(()=>learningAudio.loop),false);
+    assert.deepEqual(await page.evaluate(()=>spoken),[],'symbol uses recording, not raw-symbol TTS');
+    await page.evaluate(()=>showScreen('screen-home'));
+    assert.equal(await page.evaluate(()=>learningAudio),null);
+    for(const [width,height] of [[320,568],[820,1180]]){
+      await page.setViewportSize({width,height});
+      await page.evaluate(()=>{beginCharacterFlow('水');showScreen('screen-listen');});
+      const layout=await page.locator('#listen-options .zhuyin-glyphs').first().evaluate(el=>[...el.children].map(child=>{const b=child.getBoundingClientRect();return {x:b.x,y:b.y};}));
+      assert.ok(layout.every((p,i)=>!i || (Math.abs(p.x-layout[0].x)<1 && p.y>layout[i-1].y)));
+      await page.screenshot({path:path.join(output,`vertical-${width}.png`),fullPage:true,animations:'disabled'});
+      await page.evaluate(()=>{showScreen('screen-balloon');startBalloon();});
+      await page.waitForFunction(()=>document.querySelector('.balloon').style.transition.includes('14s'));
+      assert.equal(await page.evaluate(()=>spoken.at(-1)===balloonCurrentChar),true);
+      // Freeze motion for visual inspection, after checking the actual 14s transition.
+      const freeze = await page.addStyleTag({content:'.balloon{transition:none!important;bottom:50px!important;}'});
+      await page.screenshot({path:path.join(output,`balloon-${width}.png`),fullPage:true,animations:'disabled'});
+      await freeze.evaluate(el=>el.remove());
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+      await page.evaluate(()=>showScreen('screen-home'));
+      assert.equal(await page.evaluate(()=>balloonTimers.length),0);
+    }
+    await page.evaluate(()=>{showScreen('screen-race');startRace();});
+    assert.equal(await page.evaluate(()=>spoken.at(-1)===raceCurrentChar),true);
+    await page.locator('#screen-race .game-speech-btn').click();
+    assert.equal(await page.evaluate(()=>spoken.at(-1)===raceCurrentChar),true);
+    await page.evaluate(()=>{showScreen('screen-race-multi');nextMpRaceQuestion();});
+    assert.equal(await page.evaluate(()=>spoken.at(-1)===mpCurrentChar),true);
+    assert.equal(await page.locator('#screen-race-multi .game-speech-btn').count(),1);
+    await page.evaluate(()=>{showScreen('screen-fish');startFish();});
+    assert.equal(await page.evaluate(()=>spoken.at(-1)===fishCurrentChar),true);
+    await page.setViewportSize({width:320,height:568});
+    await page.screenshot({path:path.join(output,'fish-320.png'),fullPage:true,animations:'disabled'});
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+    await page.evaluate(()=>{clearInterval(fishTimer);fishActive=false;showScreen('screen-match');startMatch();selectMatchChar(matchPairs[0].char);});
+    assert.equal(await page.evaluate(()=>spoken.at(-1)===matchSelectedChar),true);
+    await page.screenshot({path:path.join(output,'match-320.png'),fullPage:true,animations:'disabled'});
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+    await page.evaluate(()=>{showScreen('screen-memory');startMemory();flipMemoryCard(0);});
+    assert.equal(await page.evaluate(()=>spoken.at(-1)===MEMORY_SPOKEN_NAMES[memoryCards[0].symbol]),true);
+    await page.evaluate(()=>{showScreen('screen-mole');startMole();clearInterval(moleTimer);clearInterval(moleActive);showScreen('screen-home');});
+    console.log('Audio/layout checks PASS: 37 recordings decoded, vertical options, 14s balloons, single/multiplayer prompts, replay, cancel on navigation.');
     assert.equal(blockedDatabaseRequests,0,'no production database requests attempted');
     assert.deepEqual(errors,[]);
     console.log(JSON.stringify({status:'PASS',screenshots:output,viewports:4,pageErrors:errors,productionDatabaseRequests:blockedDatabaseRequests,checks:['home and review layouts','due filters','real HanziWriter intro','completion and continuation','five-item goal','profile isolation','offline and retry','four learning entry points','fishing retained']},null,2));

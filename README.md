@@ -64,6 +64,12 @@ zhuyin-app/
 
 ## 本機驗證
 
+### 注音與遊戲語音（2026-10-02）
+
+注音選項採直式符號排列；37 個單符號使用教育部《國語注音符號手冊》的 CC BY 4.0 原始錄音，單次播放，例字需另外點選。來源與授權見 [錄音標示](assets/audio/zhuyin/ATTRIBUTION.md)。部署時請一併上傳 `learning-media.js` 和整個 `assets/audio/zhuyin/`。
+
+有國字題目的遊戲會朗讀新題，並提供「再聽一次」；翻牌唸動物、打地鼠唸玩法。國字／例字仍使用裝置的 zh-TW 系統語音，實際聲音依 iPad 安裝的語音而異。離頁會停止朗讀，播放失敗可按按鈕重試。氣球由 7 秒放慢到 14 秒，不改計分規則。
+
 不需建置步驟。用靜態 HTTP 伺服器開啟（例如 `python -m http.server 8934 --bind 127.0.0.1`），不要直接開 `file://`。
 
 ```sh
@@ -71,6 +77,7 @@ node --check app.js
 node --check daily-practice.js
 node --check practice-plan.js
 node --test tests/practice-plan.test.cjs
+node --test tests/learning-media.test.cjs
 ```
 
 瀏覽器驗證：在已提供 `playwright` 套件與 Microsoft Edge 的開發環境執行 `node tests/browser-smoke.cjs`（若套件不在專案，設定 `NODE_PATH` 指向已安裝的 node_modules）。測試自行啟動本機伺服器、替換 `config.js` 為假資料，阻擋正式資料庫請求，並將截圖輸出至系統暫存資料夾。HanziWriter 與字型仍需網路。
