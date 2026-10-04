@@ -14,14 +14,28 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3/dist/hanzi-writer.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="style.css?v=20261002-audio">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="style.css?v=20261003-auth">
 </head>
 <body>
 <div id="app">
 
   <!-- 首頁 -->
-  <div class="screen active" id="screen-home">
+  <div class="screen active" id="screen-login">
+    <div class="auth-card">
+      <img class="auth-mascot" src="assets/giraffe-guide.svg" alt="" aria-hidden="true">
+      <p class="auth-eyebrow">每天一點點，一起長大</p>
+      <h1>長頸鹿陪你<br>快樂練習</h1>
+      <p class="auth-intro">國字・注音・英文・趣味小遊戲</p>
+      <p id="auth-message" role="status">正在確認登入狀態…</p>
+      <button id="google-login" class="btn auth-google" onclick="signInWithGoogle()" disabled>使用 Google 登入／註冊</button>
+      <button id="auth-reload" class="btn" onclick="location.reload()" hidden>重新整理再試一次</button>
+      <button id="auth-signout" class="btn" onclick="signOutAccount()" hidden>登出並更換帳號</button>
+      <p class="auth-note">第一次登入會自動建立家庭帳號。<br>小朋友不需要自己的 Google 帳號。</p>
+      <div class="auth-features"><span>👨‍👩‍👧 最多四個小孩檔案</span><span>🔒 每個家庭各自保存進度</span></div>
+    </div>
+  </div>
+  <div class="screen" id="screen-home">
     <div class="topbar">
       <button class="profile-badge" onclick="showScreen('screen-profile'); renderProfileScreen();">👤 <span id="active-profile-name">小朋友</span></button>
       <div class="coin-badge"><span class="icon">🪙</span><span id="coin-count-home">8</span></div>
@@ -266,6 +280,8 @@
       <div id="parent-progress"></div>
 
       <h2 style="margin-top:18px;">設定</h2>
+      <p>登入帳號：<span id="account-email"></span></p>
+      <button class="btn" onclick="signOutAccount()">登出帳號</button>
       <button class="btn btn-secondary" onclick="resetCoins()">🪙 金幣歸零</button>
       <button class="btn btn-secondary" onclick="resetProgress()">🗑️ 任務與練習紀錄歸零</button>
       <div class="msg" id="parent-settings-msg"></div>
@@ -665,11 +681,13 @@
 
 </div>
 
-<script src="config.js"></script>
+<script src="config.js?v=20261003-auth"></script>
+<script src="account-store.js?v=20261003-auth"></script>
+<script src="account-auth.js?v=20261003-auth"></script>
 <script src="data.js"></script>
 <script src="learning-media.js?v=20261002-audio"></script>
 <script src="practice-plan.js?v=20261002"></script>
 <script src="daily-practice.js?v=20261002"></script>
-<script src="app.js?v=20261002-audio"></script>
+<script src="app.js?v=20261003-auth"></script>
 </body>
 </html>

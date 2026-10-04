@@ -12,7 +12,8 @@ window.fixtureWrites=[]; window.fixtureFailed=false;
 const stamp = new Date(); stamp.setDate(stamp.getDate()-21);
 const fixtureRow = key=>({character:key,attempt_count:2,best_reward:2,perfect_count:0,last_reward:2,updated_at:stamp.toISOString()});
 const fixtureRows=['大','ㄅ','大人','A','p2_小'].map(fixtureRow);
-const sb={from(table){let operation='select',payload;
+const fixtureUser={id:'fixture-owner',email:'parent@example.test'};
+const sb={rpc:async()=>({data:false,error:null}),auth:{getSession:async()=>({data:{session:new URLSearchParams(location.search).has('anonymous')?null:{user:fixtureUser}}}),getUser:async()=>({data:{user:fixtureUser}}),onAuthStateChange(){return {data:{subscription:{unsubscribe(){}}}}}},from(table){let operation='select',payload;
  const query={select(){return query},eq(){return query},insert(value){operation='insert';payload=value;return query},upsert(value){operation='upsert';payload=value;return query},update(value){operation='update';payload=value;return query},
  maybeSingle(){return Promise.resolve({data:{id:1,coins:8}})},
  then(resolve,reject){if(operation!=='select'){window.fixtureWrites.push({table,operation,payload});const items=Array.isArray(payload)?payload:[payload];items.forEach(item=>{if(!item.character)return;const index=fixtureRows.findIndex(row=>row.character===item.character);if(index<0)fixtureRows.push(item);else fixtureRows[index]=item;});}
@@ -66,6 +67,9 @@ const server = http.createServer((req,res)=>{
     await page.locator('#daily-review-list').getByRole('button',{name:'練習國字 大',exact:true}).click();
     await page.waitForSelector('#intro-hanzi svg path',{state:'attached'});
     assert.equal(await page.locator('#intro-hanzi svg').isVisible(),true);
+    assert.equal(await page.locator('#intro-hanzi .stroke-num-badge').count(),0,'no number overlays obscure Chinese strokes');
+    await page.evaluate(()=>replayIntro());
+    assert.equal(await page.locator('#intro-hanzi .stroke-num-badge').count(),0,'replay keeps Chinese strokes unobstructed');
     assert.equal(await page.evaluate(()=>currentChar),'大');
     // Exercise existing completion handlers against the in-memory database fixture only.
     await page.evaluate(()=>{recordProgress('大',3);showResult(3);});
@@ -165,9 +169,19 @@ const server = http.createServer((req,res)=>{
     await page.evaluate(()=>{showScreen('screen-memory');startMemory();flipMemoryCard(0);});
     assert.equal(await page.evaluate(()=>spoken.at(-1)===MEMORY_SPOKEN_NAMES[memoryCards[0].symbol]),true);
     await page.evaluate(()=>{showScreen('screen-mole');startMole();clearInterval(moleTimer);clearInterval(moleActive);showScreen('screen-home');});
+    await page.goto(base+'?anonymous=1');
+    await page.waitForFunction(()=>!document.getElementById('google-login').disabled);
+    assert.equal(await page.locator('#screen-login').isVisible(),true);
+    assert.equal(await page.locator('#screen-home').isVisible(),false);
+    assert.match(await page.locator('#auth-message').innerText(),/Google 登入/);
+    for(const [width,height] of [[320,568],[820,1180]]){
+      await page.setViewportSize({width,height});
+      await page.screenshot({path:path.join(output,`login-${width}.png`),fullPage:true,animations:'disabled'});
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`login overflow at ${width}`);
+    }
     console.log('Audio/layout checks PASS: 37 recordings decoded, vertical options, 14s balloons, single/multiplayer prompts, replay, cancel on navigation.');
     assert.equal(blockedDatabaseRequests,0,'no production database requests attempted');
     assert.deepEqual(errors,[]);
-    console.log(JSON.stringify({status:'PASS',screenshots:output,viewports:4,pageErrors:errors,productionDatabaseRequests:blockedDatabaseRequests,checks:['home and review layouts','due filters','real HanziWriter intro','completion and continuation','five-item goal','profile isolation','offline and retry','four learning entry points','fishing retained']},null,2));
+    console.log(JSON.stringify({status:'PASS',screenshots:output,viewports:4,pageErrors:errors,productionDatabaseRequests:blockedDatabaseRequests,checks:['login gate and responsive login','home and review layouts','due filters','real HanziWriter intro','completion and continuation','five-item goal','profile isolation','offline and retry','four learning entry points','fishing retained']},null,2));
   } finally {await browser.close();server.close();}
 })().catch(error=>{console.error(error);server.close();process.exitCode=1;});

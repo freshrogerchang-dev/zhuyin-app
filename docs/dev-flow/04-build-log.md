@@ -1,4 +1,27 @@
 # S4 Build Log
+## 2026-10-04：新 Supabase 專案切換與資料搬移
+- 新專案 `pfwszpywdjkxtnnctslp` 建立 owner 複合主鍵資料表與 RLS（匿名無權限；authenticated 只能操作 `auth.uid()` 自己的列；無 delete）。
+- 舊專案保留原始資料；新專案私有 schema 保存 state 1 筆／progress 55 筆完整快照，不對前端授權。一次性 claim 僅接受 auth.uid() 對應已驗證 Google identity 與 freshrogerchang@gmail.com，拒絕 caller email/metadata 偽造，重複呼叫不覆蓋新進度。
+- config.js 改為新專案 URL／Publishable Key 及獨立 Auth storageKey；不含 Google Secret 或 Supabase Secret Key。
+- 完成響應式登入頁、Google 登入／註冊、載入失敗重試、登出換帳號與 session 變更清理；其他家庭首次登入取得自己的空資料。
+- PGlite migration/RLS 測試含匿名拒絕、跨帳號讀寫／轉移拒絕、Google identity 驗證、一次性歸戶、快照保留；22/22 測試通過。
+- **發布阻擋**：2026-10-04 新專案公開 settings 仍為 Google=false。登入頁推上正式站會使全站無法進入，因此等待管理者在新專案啟用專用 Google Provider。
+## 2026-10-03：Google 登入與家庭帳號隔離（未上線）
+- 使用者允許 DB/RLS 變更並指定既有資料歸戶 freshrogerchang@gmail.com。唯讀查詢找到已驗證 email 帳號 UUID，既有進度 55 列；未輸出／讀取 Secret。
+- Google Provider 公開設定最初 false，使用者說已有共用專案憑證後重查 true。未取得 dashboard／未更換 OAuth 憑證；轉址白名單仍需確認。
+- 新增 account-auth.js 登入閘門、Google OAuth、local 登出、帳號事件鎖定＋reload 清除舊遊戲狀態；account-store.js 為查詢／更新加 owner filter，insert/upsert 強制 user_id 與複合衝突鍵。
+- localStorage 小孩名字／目前槽位依 user UUID 分開；只對已確認的舊帳號匯入舊名字。名字仍是本機設定，不宣稱跨裝置同步。
+- SDK 固定 2.117.2（npm 查核）、獨立 auth storageKey，避免同網域其他 App 混用登入儲存鍵。既有國字筆順修改保留。
+- CLI 2.81.3 下載的執行檔損壞，改用現有 Windows CLI 2.117.0，先讀 help 再建立 migration。SQL 草稿建立私有備份、按 auth.users 已驗證 email 歸戶、owner 複合主鍵與 RLS；**尚未套用或測試 SQL**。
+- 驗證：21/21 Node 測試、JS syntax、git diff --check 通過；Edge 隔離 smoke 四個 viewport 通過，pageerror 0，正式資料庫請求 0。登入單元測試使用 mock，不等同真實 Google OAuth。
+- 待辦：migration／RLS 負向測試、初始登入期間 account change 競態與資料載入失敗後寫入保護補強、登入畫面實際瀏覽器測試；確認 redirect whitelist；取得發布同意後同步切換 DB/Pages；正式 Google 登入後驗證 owner 舊紀錄與新帳號空資料。
+- 最新使用者「我想要增加留一組ID SECRETS」有歧義，先不更動共用 provider、不 commit/push、不改正式權限。
+
+## 2026-10-03：國字筆順示範不疊加數字
+- 移除國字介紹畫面一次顯示全部筆順數字的標籤，避免遮住字形；不影響英文字母的筆順標記。
+- 國字 writer 初始 `showCharacter: false`，保留既有逐筆動畫、速度與重新播放；完成後仍可看到完整國字。
+- 不修改書寫測驗的黃色下一筆提示或學習資料。本次未要求 commit／push。
+- 驗證通過：`node --check app.js`、`git diff --check`、隔離瀏覽器 smoke（含國字示範／重播均無數字標籤；pageerror 0、正式資料庫請求 0）。
 
 ## 2026-10-02：直式注音、標準錄音與遊戲朗讀
 - 每個注音選項內的符號上下排列，聲調在末符右上方，輕聲在上方；保留賽車左右選擇控制。套用聽力、字音配對、單／雙人賽車、氣球、釣魚。

@@ -40,23 +40,35 @@ const PROFILE_SLOTS = [1, 2, 3, 4];
 const STAT_COINS_KEY = '__stat_coins__';
 let activeProfileId = 1;
 let profileNames = {};
+let profileLoadGeneration = 0;
 
 function loadProfilesFromStorage(){
+  // Preserve names on this device only for the verified legacy account.
+  // This is a local display migration, not an authorization check.
+  if(legacyDataOwner){
+    try{
+      for(const key of ['zhuyin_active_profile','zhuyin_profile_names']){
+        if(localStorage.getItem(profileStorageKey(key)) === null && localStorage.getItem(key) !== null){
+          localStorage.setItem(profileStorageKey(key),localStorage.getItem(key));
+        }
+      }
+    }catch(e){ /* local names are optional */ }
+  }
   try{
-    const savedId = parseInt(localStorage.getItem('zhuyin_active_profile') || '1', 10);
+    const savedId = parseInt(localStorage.getItem(profileStorageKey('zhuyin_active_profile')) || '1', 10);
     activeProfileId = PROFILE_SLOTS.includes(savedId) ? savedId : 1;
   }catch(e){ activeProfileId = 1; }
   try{
-    profileNames = JSON.parse(localStorage.getItem('zhuyin_profile_names') || '{}');
+    profileNames = JSON.parse(localStorage.getItem(profileStorageKey('zhuyin_profile_names')) || '{}');
   }catch(e){ profileNames = {}; }
 }
 function saveProfileNames(){
-  try{ localStorage.setItem('zhuyin_profile_names', JSON.stringify(profileNames)); }
+  try{ localStorage.setItem(profileStorageKey('zhuyin_profile_names'), JSON.stringify(profileNames)); }
   catch(e){ /* 存不進去就算了，不影響當次使用 */ }
 }
 function setActiveProfileId(id){
   activeProfileId = id;
-  try{ localStorage.setItem('zhuyin_active_profile', String(id)); }
+  try{ localStorage.setItem(profileStorageKey('zhuyin_active_profile'), String(id)); }
   catch(e){ /* 忽略，頂多下次開啟要重新選 */ }
 }
 function profileKey(rawKey){
@@ -151,20 +163,34 @@ function syncCoinDisplay(){
 
 // ---- Supabase：讀取/寫入進度與金幣 ----
 async function initFromSupabase(){
+  const generation = ++profileLoadGeneration;
+  const stillCurrent = ()=>generation === profileLoadGeneration && !accountLocked;
   progressLoading = true;
   progressLoadFailed = false;
   renderDailySummary();
   if(activeProfileId === 1){
     try{
-      const { data: stateRow } = await sb.from('zhuyin_app_state').select('*').eq('id',1).maybeSingle();
+      const { data: stateRow, error } = await accountFrom('zhuyin_app_state').select('*').eq('id',1).maybeSingle();
+      if(!stillCurrent()) return;
+      if(error) throw error;
       if(stateRow){ coins = stateRow.coins; }
-      else{ await sb.from('zhuyin_app_state').insert({id:1, coins:8}); coins = 8; }
-    }catch(e){ console.warn('讀取金幣失敗，先用本機預設值', e); }
+      else{
+        const {error: insertError}=await accountFrom('zhuyin_app_state').insert({id:1, coins:8});
+        if(!stillCurrent()) return;
+        if(insertError && insertError.code !== '23505') throw insertError;
+        const {data: created,error: readError}=await accountFrom('zhuyin_app_state').select('*').eq('id',1).maybeSingle();
+        if(!stillCurrent()) return;
+        if(readError || !created) throw readError || new Error('無法讀取金幣');
+        coins = created.coins;
+      }
+    }catch(e){ progressLoadFailed = true; console.warn('讀取金幣失敗', e); }
   }
 
   try{
-    const { data: rows, error } = await sb.from('zhuyin_app_char_progress').select('*');
+    const { data: rows, error } = await accountFrom('zhuyin_app_char_progress').select('*');
+    if(!stillCurrent()) return;
     if(error) throw error;
+    progressMap = {};
     (rows||[]).forEach(r=>{
       const rawKey = rawKeyForRow(r.character);
       if(rawKey === null) return;
@@ -204,7 +230,7 @@ function updateDailyStreak(){
   lastPracticeDateStr = todayStr;
   const logical = { character: STAT_STREAK_KEY, best_reward: currentStreak, perfect_count: bestStreak, attempt_count: 0, updated_at: new Date().toISOString() };
   progressMap[STAT_STREAK_KEY] = logical;
-  sb.from('zhuyin_app_char_progress').upsert({...logical, character: profileKey(STAT_STREAK_KEY)})
+  accountFrom('zhuyin_app_char_progress').upsert({...logical, character: profileKey(STAT_STREAK_KEY)})
     .then(({error})=>{ if(error) console.warn('連續天數儲存失敗', error); });
   updateHomeStreakDisplay();
 }
@@ -234,17 +260,17 @@ function incrementRaceWins(){
   raceWinCount++;
   const logical = { character: STAT_RACE_WINS_KEY, best_reward:0, perfect_count:0, attempt_count: raceWinCount, updated_at: new Date().toISOString() };
   progressMap[STAT_RACE_WINS_KEY] = logical;
-  sb.from('zhuyin_app_char_progress').upsert({...logical, character: profileKey(STAT_RACE_WINS_KEY)})
+  accountFrom('zhuyin_app_char_progress').upsert({...logical, character: profileKey(STAT_RACE_WINS_KEY)})
     .then(({error})=>{ if(error) console.warn('賽車勝場儲存失敗', error); });
 }
 
 function saveCoins(){
   if(activeProfileId === 1){
-    sb.from('zhuyin_app_state').update({coins: coins, updated_at: new Date().toISOString()}).eq('id',1)
+    accountFrom('zhuyin_app_state').update({coins: coins, updated_at: new Date().toISOString()}).eq('id',1)
       .then(({error})=>{ if(error) console.warn('金幣儲存失敗', error); });
   } else {
     const dbRow = { character: profileKey(STAT_COINS_KEY), best_reward: coins, perfect_count:0, attempt_count:0, updated_at: new Date().toISOString() };
-    sb.from('zhuyin_app_char_progress').upsert(dbRow)
+    accountFrom('zhuyin_app_char_progress').upsert(dbRow)
       .then(({error})=>{ if(error) console.warn('金幣儲存失敗', error); });
   }
 }
@@ -260,7 +286,7 @@ function recordProgress(key, coinReward){
     updated_at: new Date().toISOString()
   };
   progressMap[key] = logical;
-  sb.from('zhuyin_app_char_progress').upsert({...logical, character: profileKey(key)})
+  accountFrom('zhuyin_app_char_progress').upsert({...logical, character: profileKey(key)})
     .then(({error})=>{ if(error) console.warn('進度儲存失敗', error); });
   updateDailyStreak();
 }
@@ -293,6 +319,7 @@ function pickWeightedFrom(keys){
 
 const GAME_SCREEN_MUSIC = { 'screen-mole': 'mole', 'screen-memory': 'memory', 'screen-match': 'match', 'screen-race': 'race', 'screen-race-multi': 'race', 'screen-balloon': 'balloon', 'screen-fish': 'mole' };
 function showScreen(id){
+  if((accountLocked || accountBooting) && id !== 'screen-login') return;
   cancelLearningSpeech();
   if(id !== 'screen-balloon'){
     balloonRoundActive = false;
@@ -609,30 +636,12 @@ function setupIntroWriter(){
   box.innerHTML = '';
   window._introWriter = HanziWriter.create(box, currentChar, {
     width: INTRO_W, height: INTRO_H, padding: INTRO_PAD,
+    showCharacter: false,
     strokeAnimationSpeed: 0.4,
     delayBetweenStrokes: 800,
     strokeColor: '#1F2A44'
   });
   window._introWriter.animateCharacter();
-  addStrokeNumberLabels(box, currentChar);
-}
-
-function addStrokeNumberLabels(box, char){
-  HanziWriter.loadCharacterData(char).then(function(data){
-    const t = HanziWriter.getScalingTransform(INTRO_W, INTRO_H, INTRO_PAD);
-    data.medians.forEach(function(median, i){
-      const rawX = median[0][0];
-      const rawY = median[0][1];
-      const sx = t.x + t.scale * rawX;
-      const sy = (INTRO_H - t.y) - t.scale * rawY;
-      const badge = document.createElement('div');
-      badge.className = 'stroke-num-badge';
-      badge.textContent = i + 1;
-      badge.style.left = sx + 'px';
-      badge.style.top = sy + 'px';
-      box.appendChild(badge);
-    });
-  }).catch(function(){ /* 資料載入失敗就不顯示數字，不影響其他功能 */ });
 }
 function replayIntro(){
   if(window._introWriter) window._introWriter.animateCharacter();
@@ -1562,7 +1571,7 @@ function resetProgress(){
     character: profileKey(k), best_reward:0, perfect_count:0, attempt_count:0, last_reward:0,
     updated_at: new Date().toISOString()
   }));
-  sb.from('zhuyin_app_char_progress').upsert(rows)
+  accountFrom('zhuyin_app_char_progress').upsert(rows)
     .then(({error})=>{
       if(error){
         console.warn('進度歸零失敗', error);
@@ -2532,6 +2541,5 @@ function catchFish(fish, label, isCorrect){
   }
 }
 
-loadProfilesFromStorage();
 installGameSpeechButtons();
-initFromSupabase();
+startAccountAuth();

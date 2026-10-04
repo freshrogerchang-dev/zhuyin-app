@@ -1,8 +1,8 @@
 // Supabase 連線設定
-// 這個 key 是 publishable(anon)金鑰，設計上就是給前端公開使用，
-// 但代表任何拿到這個網站網址、看原始碼的人都能讀寫下面兩張表：
-// zhuyin_app_state、zhuyin_app_char_progress
-// 之後若要正式給多個家庭/班級使用，務必加上登入機制做資料區隔。
-const SUPABASE_URL = 'https://umhwizsnkcphmhwwubhl.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_qDBuXFg1hy0_qzQ2f_SQdQ_rdXjp4Vj';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Publishable Key 可公開；資料權限由登入後的 user_id 與資料庫 RLS 控制。
+// Google Client Secret 與 Supabase Secret Key 絕不可放在前端。
+const SUPABASE_URL = 'https://pfwszpywdjkxtnnctslp.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_4rb-6bHDyjDVPO7STxyQFA_y6ZyFAUm';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { storageKey: 'zhuyin-auth-pfwszpywdjkxtnnctslp', persistSession: true, detectSessionInUrl: true }
+});
