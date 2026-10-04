@@ -5,7 +5,7 @@
 - config.js 改為新專案 URL／Publishable Key 及獨立 Auth storageKey；不含 Google Secret 或 Supabase Secret Key。
 - 完成響應式登入頁、Google 登入／註冊、載入失敗重試、登出換帳號與 session 變更清理；其他家庭首次登入取得自己的空資料。
 - PGlite migration/RLS 測試含匿名拒絕、跨帳號讀寫／轉移拒絕、Google identity 驗證、一次性歸戶、快照保留；22/22 測試通過。
-- **發布阻擋**：2026-10-04 新專案公開 settings 仍為 Google=false。登入頁推上正式站會使全站無法進入，因此等待管理者在新專案啟用專用 Google Provider。
+- 2026-10-04 管理者完成新專案 Google Provider 與 URL 設定；公開 settings 為 true，authorize 測試 HTTP 302 並正確導向 accounts.google.com。可進入發布與真實登入確認。
 ## 2026-10-03：Google 登入與家庭帳號隔離（未上線）
 - 使用者允許 DB/RLS 變更並指定既有資料歸戶 freshrogerchang@gmail.com。唯讀查詢找到已驗證 email 帳號 UUID，既有進度 55 列；未輸出／讀取 Secret。
 - Google Provider 公開設定最初 false，使用者說已有共用專案憑證後重查 true。未取得 dashboard／未更換 OAuth 憑證；轉址白名單仍需確認。
